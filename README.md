@@ -2,7 +2,7 @@
 
 # Kimi WebBridge Pro
 
-**面向 Codex 的真实浏览器控制 skill，强调 Windows 可用性、隐私最小化和标签页安全**
+**面向 Agent 的真实浏览器控制 skill，强调 Windows 可用性、隐私最小化和标签页安全**
 
 [![Codex Skill](https://img.shields.io/badge/Codex-Skill-black.svg)](skill/SKILL.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue.svg)](#快速开始)
@@ -14,7 +14,7 @@
 
 ## 简介
 
-Kimi WebBridge Pro 是一个独立的 Codex skill，通过本机 Kimi WebBridge daemon 控制
+Kimi WebBridge Pro 是一个独立的 Agent skill，通过本机 Kimi WebBridge daemon 控制
 用户真实、已登录的浏览器。
 
 它适合需要使用现有标签页、Cookie 会话或浏览器扩展状态的任务，例如：
@@ -82,7 +82,7 @@ mkdir -p ~/.codex/skills/kimi-webbridge-pro
 cp -R kimi-webbridge-pro/skill/. ~/.codex/skills/kimi-webbridge-pro/
 ```
 
-重新启动 Codex 或打开新线程，使 skill 列表重新加载。
+重新启动 Agent 或打开新线程，使 skill 列表重新加载。
 
 ### 3. 调用
 
@@ -105,7 +105,7 @@ cp -R kimi-webbridge-pro/skill/. ~/.codex/skills/kimi-webbridge-pro/
 ### 数据流
 
 ```text
-Codex agent
+Cli agent
     |
     | HTTP JSON
     v
