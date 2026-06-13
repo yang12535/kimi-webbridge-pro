@@ -44,8 +44,10 @@ Kimi WebBridge Pro 是一个独立的 Codex skill，通过本机 Kimi WebBridge 
 
 ### 1. 安装 Kimi WebBridge
 
-先按照 [Kimi WebBridge 官方页面](https://www.kimi.com/features/webbridge) 安装 daemon
-和浏览器扩展。
+使用本 skill 前需要同时安装本地 daemon 和浏览器扩展：
+
+- [Kimi WebBridge 中文官方说明与 daemon 安装](https://www.kimi.com/zh-cn/features/webbridge)
+- [Chrome Web Store：Kimi WebBridge 扩展](https://chromewebstore.google.com/detail/kimi-webbridge/fldmhceldgbpfpkbgopacenieobmligc?pli=1)
 
 Windows 官方安装命令：
 

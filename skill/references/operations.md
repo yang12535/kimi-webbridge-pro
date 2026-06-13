@@ -18,8 +18,13 @@ Run:
 |---|---|
 | Binary missing | If the user asked to install it, use the official installer. Otherwise confirm before running downloaded code. |
 | `running: false` | Start the daemon. |
-| `running: true`, `extension_connected: false` | Ask the user to open the browser and verify that the WebBridge extension is enabled. |
+| `running: true`, `extension_connected: false` | Ask the user to open the browser and verify that the [Kimi WebBridge extension](https://chromewebstore.google.com/detail/kimi-webbridge/fldmhceldgbpfpkbgopacenieobmligc?pli=1) is installed and enabled. |
 | Both fields are `true` | Return to `SKILL.md` and send browser commands. |
+
+Prerequisite links:
+
+- Kimi WebBridge documentation and daemon setup: `https://www.kimi.com/zh-cn/features/webbridge`
+- Chrome Web Store extension: `https://chromewebstore.google.com/detail/kimi-webbridge/fldmhceldgbpfpkbgopacenieobmligc?pli=1`
 
 Official installers:
 
@@ -48,9 +53,9 @@ curl -fsSL https://cdn.kimi.com/webbridge/install.sh | bash
 |---|---|
 | Address already in use | Stop, then start. If it persists, identify the process listening on port `10086`. |
 | Commands time out | Read recent logs for error or panic messages, then retry once after a restart. |
-| Extension remains disconnected | Open the browser, verify the extension is enabled, and retry status. |
+| Extension remains disconnected | Open the browser, install or enable the Chrome Web Store extension, and retry status. |
 | Extension is connected but actions fail | Read logs for version, multi-browser, or extension-upgrade errors. |
-| The error asks for an extension update | Update the extension from `https://www.kimi.com/features/webbridge`; do not repeatedly retry the action. |
+| The error asks for an extension update | Update the extension from the Chrome Web Store link above; do not repeatedly retry the action. |
 
 ## Recover a stale PID
 
