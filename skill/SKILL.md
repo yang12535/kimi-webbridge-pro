@@ -1,6 +1,6 @@
 ---
 name: kimi-webbridge-pro
-description: Control the user's real logged-in browser through the local Kimi WebBridge daemon. Use when the user explicitly requests Kimi WebBridge, or when a task must operate on the user's existing browser tabs, cookies, sessions, or extensions and no purpose-built connector is appropriate. Do not use for localhost targets, an explicit Chrome-plugin request, or ordinary factual web research.
+description: Control the user's real logged-in browser through the local Kimi WebBridge daemon. Use when the user explicitly requests Kimi WebBridge, or when an agent must operate on the user's existing browser tabs, cookies, sessions, or extensions and no purpose-built connector is more appropriate. Do not use for ordinary factual web research that does not require the user's browser state.
 ---
 
 # Kimi WebBridge Pro

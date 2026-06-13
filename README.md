@@ -2,9 +2,9 @@
 
 # Kimi WebBridge Pro
 
-**面向 Agent 的真实浏览器控制 skill，强调 Windows 可用性、隐私最小化和标签页安全**
+**面向本地 AI Agent 的真实浏览器控制 skill，强调隐私最小化和标签页安全**
 
-[![Codex Skill](https://img.shields.io/badge/Codex-Skill-black.svg)](skill/SKILL.md)
+[![Agent Skill](https://img.shields.io/badge/Agent-Skill-black.svg)](skill/SKILL.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue.svg)](#快速开始)
 [![Privacy](https://img.shields.io/badge/Privacy-Minimized-green.svg)](#隐私与安全)
 
@@ -14,8 +14,12 @@
 
 ## 简介
 
-Kimi WebBridge Pro 是一个独立的 Agent skill，通过本机 Kimi WebBridge daemon 控制
-用户真实、已登录的浏览器。
+Kimi WebBridge Pro 是一个独立的 Agent skill，通过本机 Kimi WebBridge daemon
+控制用户真实、已登录的浏览器。
+
+只要 Agent 能读取 Agent Skill 指令，并能执行本地 shell 或 HTTP 请求，就可以使用
+核心工作流。仓库额外提供 OpenAI/Codex 元数据，但核心协议和操作说明不依赖某个
+特定 Agent 产品。
 
 它适合需要使用现有标签页、Cookie 会话或浏览器扩展状态的任务，例如：
 
@@ -25,7 +29,7 @@ Kimi WebBridge Pro 是一个独立的 Agent skill，通过本机 Kimi WebBridge 
 - 排查点击后页面没有变化、后台标签页或弹窗拦截
 
 本项目不是搜索引擎，也不包含浏览器驱动。它依赖 Kimi WebBridge daemon 和浏览器
-扩展，并在官方 skill 的基础上补充 Codex 场景下的工作流约束。
+扩展，并在官方 skill 的基础上补充跨 Agent 工作流约束。
 
 > 本项目是社区维护的非官方项目，与 Moonshot AI、Kimi 或 OpenAI 无隶属或背书关系。
 
@@ -65,6 +69,23 @@ curl -fsSL https://cdn.kimi.com/webbridge/install.sh | bash
 
 ### 2. 安装 skill
 
+将仓库中的 `skill/` 目录复制到你的 Agent 所使用的 skills 目录，并保持目录名为
+`kimi-webbridge-pro`。不同 Agent 的 skills 路径和重载方式不同，请以对应 Agent
+文档为准。
+
+通用结构：
+
+```text
+<agent-skills-directory>/
+└── kimi-webbridge-pro/
+    ├── SKILL.md
+    ├── agents/
+    ├── references/
+    └── scripts/
+```
+
+#### Codex 安装示例
+
 Windows：
 
 ```powershell
@@ -82,7 +103,7 @@ mkdir -p ~/.codex/skills/kimi-webbridge-pro
 cp -R kimi-webbridge-pro/skill/. ~/.codex/skills/kimi-webbridge-pro/
 ```
 
-重新启动 Agent 或打开新线程，使 skill 列表重新加载。
+重新启动 Agent 或打开新会话，使 skill 列表重新加载。
 
 ### 3. 调用
 
@@ -105,7 +126,7 @@ cp -R kimi-webbridge-pro/skill/. ~/.codex/skills/kimi-webbridge-pro/
 ### 数据流
 
 ```text
-Cli agent
+Local AI agent
     |
     | HTTP JSON
     v
@@ -147,7 +168,7 @@ kimi-webbridge-pro/
 └── skill/
     ├── SKILL.md
     ├── agents/
-    │   └── openai.yaml
+    │   └── openai.yaml       # 可选的 OpenAI/Codex UI 元数据
     ├── references/
     │   ├── protocol.md
     │   ├── operations.md
@@ -164,7 +185,8 @@ kimi-webbridge-pro/
 
 ## 验证
 
-Skill 结构校验：
+通用检查包括 frontmatter、相对链接和脚本语法。若本机安装了 Codex 的
+`skill-creator`，还可以使用其校验器：
 
 ```powershell
 python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_validate.py" .\skill
