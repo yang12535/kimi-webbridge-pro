@@ -46,7 +46,7 @@ scripts/invoke.sh --session research --action navigate \
 
 For non-ASCII or complex Bash arguments, write UTF-8 JSON to a file and pass `--args-file`. See [protocol.md](references/protocol.md).
 
-Use [screenshot.ps1](scripts/screenshot.ps1) for screenshots. It accepts both current path-based responses and older base64 responses without flooding context.
+Use [screenshot.py](scripts/screenshot.py) for cross-platform screenshots. PowerShell-only workflows may continue using [screenshot.ps1](scripts/screenshot.ps1). Both accept current path-based responses and older base64 responses without flooding context.
 For large or unknown pages, use [snapshot.py](scripts/snapshot.py) in `compact` or `file` mode instead of printing the full snapshot response.
 Run Python helpers with `py -3` (or `py`) on Windows and `python3` on POSIX. Do not assume `python3` is the Windows launcher.
 
@@ -56,7 +56,7 @@ Run Python helpers with `py -3` (or `py`) on Windows and `python3` on POSIX. Do 
 2. Use `find_tab` for a user-owned existing tab, or `navigate` with `newTab:true` for a task-owned tab.
 3. Take a `snapshot`.
 4. Use snapshot `@e` refs with `click` and `fill`.
-5. After navigation or a click that should change the page, wait briefly and poll URL/title or snapshot up to three times.
+5. After navigation or a click that should change the page, use [wait_for.py](scripts/wait_for.py) or poll URL/title up to three times.
 6. Take a new snapshot after a substantial DOM change; old refs may be stale.
 7. Close only task-owned tabs when finished.
 
@@ -64,6 +64,8 @@ Do not assume `find_tab` visibly focuses a browser tab. It selects a matching ta
 Treat `@e` values as WebBridge snapshot references, not DOM attributes. Do not query them with selectors such as `[data-ref="@e1"]`.
 
 ## Recover when the page looks unchanged
+
+**Check browser popup and new-window blocking before repeating the click.**
 
 1. Compare the returned URL and take a fresh `snapshot`; SPA navigation may update in place.
 2. Call `list_tabs`; the destination may be in a background tab.
@@ -75,6 +77,7 @@ Treat `@e` values as WebBridge snapshot references, not DOM attributes. Do not q
 
 - Treat tabs found with `find_tab` as user-owned. Do not close them unless the user explicitly asks.
 - Treat tabs created with `navigate newTab:true` as task-owned. Close them when cleanup is appropriate.
+- The bundled invoke helpers refuse `close_session` unless `--force` or `-Force` is supplied. Use it only after verifying every session tab is task-owned.
 - Collect only the page content needed for the task. Treat snapshots, screenshots, PDFs, network captures, and page text as potentially sensitive.
 - Do not inspect or return cookies, authorization headers, session tokens, password fields, browser storage, or unrelated private page content.
 - Use `network` only when the task specifically requires request-level diagnosis, and avoid collecting authentication headers or unrelated bodies.

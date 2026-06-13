@@ -13,6 +13,8 @@ daemon.pid
 *.jpeg
 *.pdf
 screenshots/
+__pycache__/
+*.pyc
 
 # OS and editor files
 .DS_Store

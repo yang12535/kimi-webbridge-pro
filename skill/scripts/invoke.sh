@@ -9,6 +9,8 @@ args_file=""
 output_path=""
 daemon_url="http://127.0.0.1:10086"
 timeout=30
+dry_run=false
+force=false
 
 usage() {
   cat <<'EOF'
@@ -22,6 +24,8 @@ Options:
   -o, --output PATH        Save the raw response instead of printing it
   -d, --daemon-url URL     Daemon URL (default: http://127.0.0.1:10086)
   -t, --timeout SECONDS    Request timeout (default: 30)
+      --dry-run            Print the request body without sending it
+      --force              Allow destructive helper actions such as close_session
   -h, --help               Show this help
 
 Use --args-file for non-ASCII text or complex JSON.
@@ -58,6 +62,14 @@ while (($#)); do
       timeout="${2:?missing timeout}"
       shift 2
       ;;
+    --dry-run)
+      dry_run=true
+      shift
+      ;;
+    --force)
+      force=true
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -77,6 +89,10 @@ done
   exit 2
 }
 [[ "$timeout" =~ ^[1-9][0-9]*$ ]] || { echo "Timeout must be a positive integer." >&2; exit 2; }
+if [[ "$action" == "close_session" && "$force" != true ]]; then
+  echo "Refusing close_session without --force; verify every tab is task-owned." >&2
+  exit 2
+fi
 
 if [[ -n "$args_file" ]]; then
   [[ -f "$args_file" ]] || { echo "Arguments file not found: $args_file" >&2; exit 2; }
@@ -94,6 +110,12 @@ trap 'rm -f "$request_file"' EXIT
   fi
   printf '}'
 } > "$request_file"
+
+if [[ "$dry_run" == true ]]; then
+  cat "$request_file"
+  printf '\n'
+  exit 0
+fi
 
 curl_args=(
   --silent

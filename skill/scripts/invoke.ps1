@@ -10,8 +10,16 @@ param(
     [string] $DaemonUrl = "http://127.0.0.1:10086",
 
     [ValidateRange(1, 300)]
-    [int] $TimeoutSec = 30
+    [int] $TimeoutSec = 30,
+
+    [switch] $DryRun,
+
+    [switch] $Force
 )
+
+if ($Action -eq "close_session" -and -not $Force) {
+    throw "Refusing close_session without -Force; verify every tab is task-owned."
+}
 
 # Keep the daemon envelope consistent across every action.
 $body = [ordered]@{
@@ -25,6 +33,11 @@ if ($Session) {
 
 # Send explicit UTF-8 bytes so non-ASCII input survives Windows PowerShell.
 $json = $body | ConvertTo-Json -Depth 20 -Compress
+if ($DryRun) {
+    $json
+    return
+}
+
 $response = Invoke-RestMethod `
     -Method Post `
     -Uri "$DaemonUrl/command" `

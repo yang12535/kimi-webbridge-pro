@@ -35,6 +35,20 @@ scripts/invoke.sh --session demo --action fill \
 rm -f /tmp/webbridge-args.json
 ```
 
+Both invoke helpers support a no-request payload check:
+
+```powershell
+& scripts\invoke.ps1 -Session demo -Action fill -ActionArgs @{
+  selector = "@e10"
+  value = "显卡日报"
+} -DryRun
+```
+
+```bash
+scripts/invoke.sh --session demo --action fill \
+  --args-file /tmp/webbridge-args.json --dry-run
+```
+
 Use `snapshot.py` to prevent large snapshot responses from flooding context:
 
 ```powershell
@@ -54,6 +68,29 @@ python3 scripts/snapshot.py --session demo --mode file
 
 `compact` is for locating controls. Use `file` when the task requires article text or other static page content, then read only the relevant portions of that file.
 On Windows, prefer `py -3` or `py`; do not assume a `python3` command exists.
+The Python helpers configure UTF-8 stdout themselves. If an older shell still renders mojibake, use `--mode file` and read the UTF-8 file instead.
+
+Use the cross-platform screenshot helper:
+
+```powershell
+py -3 scripts\screenshot.py --session demo
+```
+
+```bash
+python3 scripts/screenshot.py --session demo
+```
+
+Wait for an expected URL, title, or visible accessibility text:
+
+```powershell
+py -3 scripts\wait_for.py --session demo `
+  --url-contains "zhuanlan.zhihu.com" --timeout 10
+```
+
+```bash
+python3 scripts/wait_for.py --session demo \
+  --url-contains "zhuanlan.zhihu.com" --timeout 10
+```
 
 ## Actions
 
@@ -109,6 +146,14 @@ On Windows, prefer `py -3` or `py`; do not assume a `python3` command exists.
 
 - Click a submit button directly when possible. Use `evaluate` for special key events because there is no dedicated keypress action.
 - Top-frame actions cannot access cross-origin iframe contents. Navigate to the iframe URL directly when appropriate.
+- For long pages, scroll in bounded steps and take a fresh snapshot afterward:
+
+```javascript
+(() => {
+  window.scrollBy({ top: 800, behavior: "instant" });
+  return { scrollY: window.scrollY, height: document.documentElement.scrollHeight };
+})()
+```
 
 ## Waiting and retrying
 
@@ -116,10 +161,25 @@ On Windows, prefer `py -3` or `py`; do not assume a `python3` command exists.
 - Retry the observation up to three times with a short delay when the page is still loading.
 - Do not blindly repeat the click while waiting. Repeated clicks can open duplicate tabs or submit an action twice.
 - If the page remains unchanged, follow the tab and popup recovery flow below.
+- `wait_for.py` polls snapshots and exits nonzero on timeout; it does not repeat the original click.
 
 ## Tab and popup behavior
 
 - `find_tab active:true` prefers the currently active matching browser tab; it does not mean "activate this result."
 - A click may open a background tab without changing the visible page.
-- If `list_tabs` shows no destination tab, the browser may have blocked the popup or new window. Ask the user to allow it for the site before retrying.
+- **If `list_tabs` shows no destination tab, the browser may have blocked the popup or new window. Ask the user to allow it for the site before retrying.**
 - If no tab appears and the clicked element is a link, use `evaluate` to read its real `href`, then call `navigate` directly.
+
+## Closing sessions safely
+
+The invoke helpers require an explicit force flag for `close_session`:
+
+```powershell
+& scripts\invoke.ps1 -Session demo -Action close_session -Force
+```
+
+```bash
+scripts/invoke.sh --session demo --action close_session --force
+```
+
+Before forcing the close, call `list_tabs` and verify that every listed tab was created for the task. Prefer `close_tab` when ownership is mixed or uncertain.
