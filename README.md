@@ -271,6 +271,13 @@ py -3 .\skill\scripts\wait_for.py --session demo `
 py -3 -m unittest discover -s tests -v
 ```
 
+### Agent 实测
+
+- [Kimi K2.7 Code：知乎搜索、文章阅读、截图与修复后二次验收](https://github.com/yang12535/kimi-webbridge-pro/issues/1)
+
+该评价来自 Kimi K2.7 Code 对真实浏览器工作流的端到端测试，不代表 Moonshot AI 的
+官方背书。
+
 ## 已知限制
 
 - PowerShell helper 目前以 Windows 为主；协议本身可在其他平台通过 HTTP 调用
