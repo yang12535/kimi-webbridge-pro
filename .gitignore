@@ -1,0 +1,21 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+identity.json
+daemon.pid
+
+# Runtime output
+*.log
+*.tmp
+*.png
+*.jpg
+*.jpeg
+*.pdf
+screenshots/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

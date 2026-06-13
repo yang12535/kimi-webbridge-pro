@@ -1,0 +1,78 @@
+# Operations
+
+Read this file when Kimi WebBridge is missing, stopped, disconnected, timing out, or behaving inconsistently.
+
+## Status routing
+
+Run:
+
+```powershell
+& "$env:USERPROFILE\.kimi-webbridge\bin\kimi-webbridge.exe" status
+```
+
+```bash
+~/.kimi-webbridge/bin/kimi-webbridge status
+```
+
+| Observed state | Action |
+|---|---|
+| Binary missing | If the user asked to install it, use the official installer. Otherwise confirm before running downloaded code. |
+| `running: false` | Start the daemon. |
+| `running: true`, `extension_connected: false` | Ask the user to open the browser and verify that the WebBridge extension is enabled. |
+| Both fields are `true` | Return to `SKILL.md` and send browser commands. |
+
+Official installers:
+
+```powershell
+irm https://cdn.kimi.com/webbridge/install.ps1 | iex
+```
+
+```bash
+curl -fsSL https://cdn.kimi.com/webbridge/install.sh | bash
+```
+
+## Lifecycle commands
+
+| Operation | Windows | POSIX |
+|---|---|---|
+| Status | `& "$env:USERPROFILE\.kimi-webbridge\bin\kimi-webbridge.exe" status` | `~/.kimi-webbridge/bin/kimi-webbridge status` |
+| Start | `& "$env:USERPROFILE\.kimi-webbridge\bin\kimi-webbridge.exe" start` | `~/.kimi-webbridge/bin/kimi-webbridge start` |
+| Stop | `& "$env:USERPROFILE\.kimi-webbridge\bin\kimi-webbridge.exe" stop` | `~/.kimi-webbridge/bin/kimi-webbridge stop` |
+| Restart | `& "$env:USERPROFILE\.kimi-webbridge\bin\kimi-webbridge.exe" restart` | `~/.kimi-webbridge/bin/kimi-webbridge restart` |
+| Recent logs | `& "$env:USERPROFILE\.kimi-webbridge\bin\kimi-webbridge.exe" logs -n 100` | `~/.kimi-webbridge/bin/kimi-webbridge logs -n 100` |
+| Previous logs | `& "$env:USERPROFILE\.kimi-webbridge\bin\kimi-webbridge.exe" logs --prev` | `~/.kimi-webbridge/bin/kimi-webbridge logs --prev` |
+
+## Diagnose failures
+
+| Symptom | Action |
+|---|---|
+| Address already in use | Stop, then start. If it persists, identify the process listening on port `10086`. |
+| Commands time out | Read recent logs for error or panic messages, then retry once after a restart. |
+| Extension remains disconnected | Open the browser, verify the extension is enabled, and retry status. |
+| Extension is connected but actions fail | Read logs for version, multi-browser, or extension-upgrade errors. |
+| The error asks for an extension update | Update the extension from `https://www.kimi.com/features/webbridge`; do not repeatedly retry the action. |
+
+## Recover a stale PID
+
+Delete `daemon.pid` only after verifying that its recorded process no longer exists. Never remove it merely because a start command failed.
+
+```powershell
+$pidFile = "$env:USERPROFILE\.kimi-webbridge\daemon.pid"
+$daemonPid = [int](Get-Content -Raw -LiteralPath $pidFile)
+$daemonProcess = Get-Process -Id $daemonPid -ErrorAction SilentlyContinue
+if ($null -eq $daemonProcess) {
+  Remove-Item -LiteralPath $pidFile
+  & "$env:USERPROFILE\.kimi-webbridge\bin\kimi-webbridge.exe" start
+}
+```
+
+```bash
+pid_file="$HOME/.kimi-webbridge/daemon.pid"
+daemon_pid="$(cat "$pid_file")"
+if ! kill -0 "$daemon_pid" 2>/dev/null; then
+  rm -- "$pid_file"
+  "$HOME/.kimi-webbridge/bin/kimi-webbridge" start
+fi
+```
+
+If the PID still resolves to a process, inspect that process and logs instead of deleting the file.

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Kimi WebBridge Pro"
+  short_description: "Reliable control for a logged-in browser session"
+  default_prompt: "Use $kimi-webbridge-pro to inspect and interact with my current logged-in browser session."
+
+policy:
+  allow_implicit_invocation: true

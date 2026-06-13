@@ -1,0 +1,211 @@
+<div align="center">
+
+# Kimi WebBridge Pro
+
+**面向 Codex 的真实浏览器控制 skill，强调 Windows 可用性、隐私最小化和标签页安全**
+
+[![Codex Skill](https://img.shields.io/badge/Codex-Skill-black.svg)](skill/SKILL.md)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue.svg)](#快速开始)
+[![Privacy](https://img.shields.io/badge/Privacy-Minimized-green.svg)](#隐私与安全)
+
+</div>
+
+---
+
+## 简介
+
+Kimi WebBridge Pro 是一个独立的 Codex skill，通过本机 Kimi WebBridge daemon 控制
+用户真实、已登录的浏览器。
+
+它适合需要使用现有标签页、Cookie 会话或浏览器扩展状态的任务，例如：
+
+- 阅读用户已经登录的网站
+- 在现有标签页中搜索、点击和填写内容
+- 保存页面截图或 PDF
+- 排查点击后页面没有变化、后台标签页或弹窗拦截
+
+本项目不是搜索引擎，也不包含浏览器驱动。它依赖 Kimi WebBridge daemon 和浏览器
+扩展，并在官方 skill 的基础上补充 Codex 场景下的工作流约束。
+
+> 本项目是社区维护的非官方项目，与 Moonshot AI、Kimi 或 OpenAI 无隶属或背书关系。
+
+## 主要增强
+
+| 能力 | 说明 |
+|---|---|
+| Windows 原生 helper | 使用 PowerShell 对象构造 UTF-8 JSON，避免命令行转义问题 |
+| 截图协议兼容 | 同时支持返回本地路径的新版本和返回 base64 的旧版本 |
+| 标签页所有权 | 区分用户原有标签页和任务新建标签页，避免误关页面 |
+| 弹窗诊断 | 页面无变化时依次检查 SPA、后台标签页和浏览器弹窗拦截 |
+| 隐私最小化 | 限制 Cookie、认证头、浏览器存储和无关私人内容的读取 |
+| 分层文档 | Agent 操作说明、协议参考、故障恢复和人类原理文档彼此分离 |
+
+## 快速开始
+
+### 1. 安装 Kimi WebBridge
+
+先按照 [Kimi WebBridge 官方页面](https://www.kimi.com/features/webbridge) 安装 daemon
+和浏览器扩展。
+
+Windows 官方安装命令：
+
+```powershell
+irm https://cdn.kimi.com/webbridge/install.ps1 | iex
+```
+
+POSIX 官方安装命令：
+
+```bash
+curl -fsSL https://cdn.kimi.com/webbridge/install.sh | bash
+```
+
+执行远程安装脚本前，请确认域名和脚本来源符合你的安全要求。
+
+### 2. 安装 skill
+
+Windows：
+
+```powershell
+git clone https://github.com/yang12535/kimi-webbridge-pro.git
+$target = "$env:USERPROFILE\.codex\skills\kimi-webbridge-pro"
+New-Item -ItemType Directory -Path $target -Force | Out-Null
+Copy-Item ".\kimi-webbridge-pro\skill\*" -Destination $target -Recurse -Force
+```
+
+Linux / macOS：
+
+```bash
+git clone https://github.com/yang12535/kimi-webbridge-pro.git
+mkdir -p ~/.codex/skills/kimi-webbridge-pro
+cp -R kimi-webbridge-pro/skill/. ~/.codex/skills/kimi-webbridge-pro/
+```
+
+重新启动 Codex 或打开新线程，使 skill 列表重新加载。
+
+### 3. 调用
+
+```text
+使用 $kimi-webbridge-pro 查看我当前登录的网页。
+```
+
+```text
+使用 $kimi-webbridge-pro 在我打开的知乎页面搜索 OpenAI。
+```
+
+```text
+使用 $kimi-webbridge-pro 截取当前页面，并在完成后删除临时文件。
+```
+
+## 隐私与安全
+
+这个 skill 能访问真实登录态，因此应按高权限工具对待。
+
+### 数据流
+
+```text
+Codex agent
+    |
+    | HTTP JSON
+    v
+127.0.0.1:10086 daemon
+    |
+    v
+浏览器扩展和真实标签页
+```
+
+仓库中的 PowerShell helper：
+
+- 只向配置的 daemon 地址发送命令，默认是 `127.0.0.1:10086`
+- 不保存 Cookie、密码、认证令牌或浏览器存储
+- 不包含遥测或第三方分析代码
+- 截图默认使用临时目录或 daemon 返回的本地路径
+
+但是，本地 daemon 不等于数据永远只停留在本机。页面 snapshot、截图内容、PDF 或网络
+结果一旦返回给 agent，就会进入当前 AI 会话的处理范围。
+
+### 默认隐私规则
+
+- 只读取完成任务所需的最少页面内容
+- 不读取或返回 Cookie、Authorization、session token、密码字段或浏览器存储
+- `network` 仅用于用户确实需要的请求级诊断
+- 不采集 `Cookie`、`Set-Cookie`、`Authorization` 或带令牌的请求体
+- 临时截图和 PDF 在任务完成后删除，除非用户明确要求保留
+- 上传、发送、发布、购买、删除和权限变更前需要确认
+- 不绕过验证码、付费墙、年龄限制、浏览器警告或网站安全机制
+
+Kimi WebBridge daemon 和浏览器扩展是外部依赖，其自身的数据处理行为不由本仓库控制。
+安装和使用前应自行审阅对应产品的隐私政策与实现。
+
+## 项目结构
+
+```text
+kimi-webbridge-pro/
+├── README.md
+├── .gitignore
+└── skill/
+    ├── SKILL.md
+    ├── agents/
+    │   └── openai.yaml
+    ├── references/
+    │   ├── protocol.md
+    │   ├── operations.md
+    │   └── how-it-works.md
+    └── scripts/
+        ├── invoke.ps1
+        └── screenshot.ps1
+```
+
+- `SKILL.md`：Agent 正常执行时读取的操作手册
+- `protocol.md`：动作参数、响应和隐私约束
+- `operations.md`：安装、状态检查和 daemon 故障恢复
+- `how-it-works.md`：面向人类维护者的原理说明，内容较长，不推荐 Agent 日常加载
+
+## 验证
+
+Skill 结构校验：
+
+```powershell
+python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_validate.py" .\skill
+```
+
+PowerShell 语法检查：
+
+```powershell
+Get-ChildItem .\skill\scripts -Filter *.ps1 | ForEach-Object {
+    $errors = $null
+    [System.Management.Automation.Language.Parser]::ParseFile(
+        $_.FullName,
+        [ref]$null,
+        [ref]$errors
+    ) | Out-Null
+    if ($errors.Count) { throw $errors }
+}
+```
+
+无副作用的 daemon 冒烟测试：
+
+```powershell
+& .\skill\scripts\invoke.ps1 `
+    -Session "kimi-webbridge-pro-smoke" `
+    -Action "list_tabs"
+```
+
+## 已知限制
+
+- PowerShell helper 目前以 Windows 为主；协议本身可在其他平台通过 HTTP 调用
+- 合成点击和输入无法满足要求 `event.isTrusted` 的网站
+- 顶层页面操作不能直接访问跨域 iframe 内容
+- 浏览器可能拦截站点尝试打开的弹窗或新标签页
+- daemon 和扩展升级后，响应协议可能发生变化，需要重新实测
+
+## 贡献
+
+提交修改前请保持以下分层：
+
+1. 脚本只保留帮助理解意图的最小注释
+2. `SKILL.md` 只写 Agent 必须执行的步骤和常见问题
+3. 协议细节进入 `protocol.md`
+4. 生命周期与恢复流程进入 `operations.md`
+5. 原理和设计原因进入 `how-it-works.md`
+
+涉及 daemon 协议的改动应通过真实请求验证，不能只依据旧文档推断。
