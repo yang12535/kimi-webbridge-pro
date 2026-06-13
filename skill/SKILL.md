@@ -25,7 +25,9 @@ Proceed only when both `running` and `extension_connected` are `true`. Otherwise
 
 Read [protocol.md](references/protocol.md) before the first browser command in a task or whenever an action's arguments are uncertain.
 
-On Windows, call the bundled helpers instead of hand-escaping JSON:
+Use the bundled helper for the current shell instead of hand-escaping JSON.
+
+PowerShell:
 
 ```powershell
 & scripts\invoke.ps1 -Session "research" -Action "navigate" -ActionArgs @{
@@ -35,7 +37,18 @@ On Windows, call the bundled helpers instead of hand-escaping JSON:
 }
 ```
 
+Bash:
+
+```bash
+scripts/invoke.sh --session research --action navigate \
+  --args-json '{"url":"https://example.com","newTab":true,"group_title":"Research"}'
+```
+
+For non-ASCII or complex Bash arguments, write UTF-8 JSON to a file and pass `--args-file`. See [protocol.md](references/protocol.md).
+
 Use [screenshot.ps1](scripts/screenshot.ps1) for screenshots. It accepts both current path-based responses and older base64 responses without flooding context.
+For large or unknown pages, use [snapshot.py](scripts/snapshot.py) in `compact` or `file` mode instead of printing the full snapshot response.
+Run Python helpers with `py -3` (or `py`) on Windows and `python3` on POSIX. Do not assume `python3` is the Windows launcher.
 
 ## Follow one task workflow
 
@@ -43,10 +56,12 @@ Use [screenshot.ps1](scripts/screenshot.ps1) for screenshots. It accepts both cu
 2. Use `find_tab` for a user-owned existing tab, or `navigate` with `newTab:true` for a task-owned tab.
 3. Take a `snapshot`.
 4. Use snapshot `@e` refs with `click` and `fill`.
-5. Take a new snapshot after navigation or a substantial DOM change; old refs may be stale.
-6. Close only task-owned tabs when finished.
+5. After navigation or a click that should change the page, wait briefly and poll URL/title or snapshot up to three times.
+6. Take a new snapshot after a substantial DOM change; old refs may be stale.
+7. Close only task-owned tabs when finished.
 
 Do not assume `find_tab` visibly focuses a browser tab. It selects a matching tab for the WebBridge session; `active:true` means prefer the browser's currently active matching tab.
+Treat `@e` values as WebBridge snapshot references, not DOM attributes. Do not query them with selectors such as `[data-ref="@e1"]`.
 
 ## Recover when the page looks unchanged
 

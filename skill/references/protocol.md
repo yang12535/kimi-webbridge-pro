@@ -15,6 +15,46 @@ Use `POST http://127.0.0.1:10086/command` with JSON:
 
 Keep `session` at the top level and reuse one session name for the task.
 
+## Helper scripts
+
+PowerShell accepts a hashtable directly:
+
+```powershell
+& scripts\invoke.ps1 -Session "demo" -Action "fill" -ActionArgs @{
+  selector = "@e10"
+  value = "显卡日报"
+}
+```
+
+For Bash, use a UTF-8 JSON file when arguments contain non-ASCII text or complex quoting:
+
+```bash
+printf '%s' '{"selector":"@e10","value":"显卡日报"}' > /tmp/webbridge-args.json
+scripts/invoke.sh --session demo --action fill \
+  --args-file /tmp/webbridge-args.json
+rm -f /tmp/webbridge-args.json
+```
+
+Use `snapshot.py` to prevent large snapshot responses from flooding context:
+
+```powershell
+# Windows: use the Python launcher
+py -3 scripts\snapshot.py --session demo --mode compact
+py -3 scripts\snapshot.py --session demo --mode file
+```
+
+```bash
+# POSIX
+# URL, title, headings, and actionable refs only
+python3 scripts/snapshot.py --session demo --mode compact
+
+# Full UTF-8 response saved under the system temp directory
+python3 scripts/snapshot.py --session demo --mode file
+```
+
+`compact` is for locating controls. Use `file` when the task requires article text or other static page content, then read only the relevant portions of that file.
+On Windows, prefer `py -3` or `py`; do not assume a `python3` command exists.
+
 ## Actions
 
 | Action | Arguments | Purpose |
@@ -44,6 +84,7 @@ Keep `session` at the top level and reuse one session name for the task.
 ## Interaction rules
 
 - Prefer snapshot refs over CSS selectors.
+- Snapshot refs such as `@e10` are WebBridge references, not DOM attributes. They work with `click` and `fill`, but selectors such as `[data-ref="@e10"]` usually do not exist.
 - Refresh the snapshot after navigation or major DOM changes.
 - Treat `click` and `fill` as synthetic DOM events. Sites requiring `event.isTrusted` may reject them.
 - Treat `fill` as clear-and-replace. Read and concatenate the existing value before filling when appending.
@@ -56,11 +97,29 @@ Keep `session` at the top level and reuse one session name for the task.
 })()
 ```
 
+- To recover a link when an `@e` click does not navigate, locate the DOM link by stable visible text or another real attribute and return only its URL:
+
+```javascript
+(() => {
+  const link = Array.from(document.querySelectorAll("a"))
+    .find((item) => item.textContent?.includes("显卡日报"));
+  return link?.href ?? null;
+})()
+```
+
 - Click a submit button directly when possible. Use `evaluate` for special key events because there is no dedicated keypress action.
 - Top-frame actions cannot access cross-origin iframe contents. Navigate to the iframe URL directly when appropriate.
+
+## Waiting and retrying
+
+- After `navigate` or a click that should change the page, wait about one second, then inspect URL/title or take a new snapshot.
+- Retry the observation up to three times with a short delay when the page is still loading.
+- Do not blindly repeat the click while waiting. Repeated clicks can open duplicate tabs or submit an action twice.
+- If the page remains unchanged, follow the tab and popup recovery flow below.
 
 ## Tab and popup behavior
 
 - `find_tab active:true` prefers the currently active matching browser tab; it does not mean "activate this result."
 - A click may open a background tab without changing the visible page.
 - If `list_tabs` shows no destination tab, the browser may have blocked the popup or new window. Ask the user to allow it for the site before retrying.
+- If no tab appears and the clicked element is a link, use `evaluate` to read its real `href`, then call `navigate` directly.

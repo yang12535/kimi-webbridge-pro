@@ -38,6 +38,8 @@ Kimi WebBridge Pro 是一个独立的 Agent skill，通过本机 Kimi WebBridge 
 | 能力 | 说明 |
 |---|---|
 | Windows 原生 helper | 使用 PowerShell 对象构造 UTF-8 JSON，避免命令行转义问题 |
+| Bash 调用 helper | 无 `jq` 依赖，支持从 UTF-8 JSON 文件读取中文和复杂参数 |
+| Snapshot 控制 | 可输出精简 UI 摘要，或把完整快照写入临时文件 |
 | 截图协议兼容 | 同时支持返回本地路径的新版本和返回 base64 的旧版本 |
 | 标签页所有权 | 区分用户原有标签页和任务新建标签页，避免误关页面 |
 | 弹窗诊断 | 页面无变化时依次检查 SPA、后台标签页和浏览器弹窗拦截 |
@@ -175,6 +177,8 @@ kimi-webbridge-pro/
     │   └── how-it-works.md
     └── scripts/
         ├── invoke.ps1
+        ├── invoke.sh
+        ├── snapshot.py
         └── screenshot.ps1
 ```
 
@@ -189,7 +193,7 @@ kimi-webbridge-pro/
 `skill-creator`，还可以使用其校验器：
 
 ```powershell
-python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_validate.py" .\skill
+py -3 "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_validate.py" .\skill
 ```
 
 PowerShell 语法检查：
@@ -214,9 +218,42 @@ Get-ChildItem .\skill\scripts -Filter *.ps1 | ForEach-Object {
     -Action "list_tabs"
 ```
 
+Bash 调用：
+
+```bash
+./skill/scripts/invoke.sh \
+  --session kimi-webbridge-pro-smoke \
+  --action list_tabs
+```
+
+大型页面快照：
+
+Windows：
+
+```powershell
+# 精简输出，适合定位输入框、按钮和链接
+py -3 .\skill\scripts\snapshot.py --session demo --mode compact
+
+# 完整快照保存到临时文件，仅返回文件路径
+py -3 .\skill\scripts\snapshot.py --session demo --mode file
+```
+
+Linux / macOS：
+
+```bash
+# 精简输出，适合定位输入框、按钮和链接
+python3 ./skill/scripts/snapshot.py --session demo --mode compact
+
+# 完整快照保存到临时文件，仅返回文件路径
+python3 ./skill/scripts/snapshot.py --session demo --mode file
+```
+
+Windows 应使用 `py -3` 或 `py` 启动 Python，不要假定存在 `python3` 命令。
+
 ## 已知限制
 
 - PowerShell helper 目前以 Windows 为主；协议本身可在其他平台通过 HTTP 调用
+- `snapshot.py` 需要 Python 3，Bash helper 需要 Bash 和 curl
 - 合成点击和输入无法满足要求 `event.isTrusted` 的网站
 - 顶层页面操作不能直接访问跨域 iframe 内容
 - 浏览器可能拦截站点尝试打开的弹窗或新标签页
