@@ -85,12 +85,25 @@ Wait for an expected URL, title, or visible accessibility text:
 ```powershell
 py -3 scripts\wait_for.py --session demo `
   --url-contains "zhuanlan.zhihu.com" --timeout 10
+py -3 scripts\wait_for.py --session demo `
+  --text-contains "已保存" --timeout 10
 ```
 
 ```bash
 python3 scripts/wait_for.py --session demo \
   --url-contains "zhuanlan.zhihu.com" --timeout 10
+python3 scripts/wait_for.py --session demo \
+  --text-contains "Saved" --timeout 10
 ```
+
+`wait_for.py` accepts these condition flags:
+
+| Flag | Meaning |
+|---|---|
+| `--url-contains` | Current tab URL contains the value. |
+| `--title-contains` | Current tab title contains the value. |
+| `--text-contains` | Accessibility tree text contains the value. |
+| `--visible-text` | Alias for `--text-contains`; prefer `--text-contains` in docs. |
 
 ## Actions
 
@@ -183,3 +196,14 @@ scripts/invoke.sh --session demo --action close_session --force
 ```
 
 Before forcing the close, call `list_tabs` and verify that every listed tab was created for the task. Prefer `close_tab` when ownership is mixed or uncertain.
+
+## Local web app smoke-test recipe
+
+For localhost apps where the task owns a fresh tab:
+
+1. Run `doctor.py --wait-connected 20`; proceed only when ready.
+2. Call `navigate` with `newTab:true` and a stable `group_title`.
+3. Take `snapshot.py --mode compact` and use `@e` refs for login, edit, or toolbar controls.
+4. After every click that should open a modal or update an SPA, call `wait_for.py --text-contains ...` or take a fresh compact snapshot.
+5. Use `evaluate` only for bounded state checks such as `location.href`, modal class names, title text, or console error arrays.
+6. Call `list_tabs`; if all listed tabs are task-owned, close with `close_tab` or forced `close_session`.

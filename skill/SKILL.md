@@ -20,6 +20,7 @@ Run the platform status command before sending browser actions:
 ```
 
 Proceed only when both `running` and `extension_connected` are `true`. Otherwise read [operations.md](references/operations.md).
+For richer diagnostics, use `scripts/doctor.py --wait-connected 20` before deciding the extension is unavailable.
 
 ## Use the protocol
 
@@ -48,6 +49,7 @@ For non-ASCII or complex Bash arguments, write UTF-8 JSON to a file and pass `--
 
 Use [screenshot.py](scripts/screenshot.py) for cross-platform screenshots. PowerShell-only workflows may continue using [screenshot.ps1](scripts/screenshot.ps1). Both accept current path-based responses and older base64 responses without flooding context.
 For large or unknown pages, use [snapshot.py](scripts/snapshot.py) in `compact` or `file` mode instead of printing the full snapshot response.
+Use [doctor.py](scripts/doctor.py) for no-action readiness checks: binary presence, daemon status, port reachability, PID staleness, and extension connection.
 Run Python helpers with `py -3` (or `py`) on Windows and `python3` on POSIX. Do not assume `python3` is the Windows launcher.
 
 ## Follow one task workflow
@@ -58,10 +60,11 @@ Run Python helpers with `py -3` (or `py`) on Windows and `python3` on POSIX. Do 
 4. Use snapshot `@e` refs with `click` and `fill`.
 5. After navigation or a click that should change the page, use [wait_for.py](scripts/wait_for.py) or poll URL/title up to three times.
 6. Take a new snapshot after a substantial DOM change; old refs may be stale.
-7. Close only task-owned tabs when finished.
+7. Use `list_tabs` before cleanup and close only task-owned tabs when finished.
 
 Do not assume `find_tab` visibly focuses a browser tab. It selects a matching tab for the WebBridge session; `active:true` means prefer the browser's currently active matching tab.
 Treat `@e` values as WebBridge snapshot references, not DOM attributes. Do not query them with selectors such as `[data-ref="@e1"]`.
+When using `wait_for.py`, the text condition flag is `--text-contains`; `--visible-text` is accepted as an alias.
 
 ## Recover when the page looks unchanged
 

@@ -4,6 +4,18 @@ Read this file when Kimi WebBridge is missing, stopped, disconnected, timing out
 
 ## Status routing
 
+Prefer the no-action doctor when it is available:
+
+```powershell
+py -3 scripts\doctor.py --wait-connected 20
+```
+
+```bash
+python3 scripts/doctor.py --wait-connected 20
+```
+
+`doctor.py` checks the binary path, daemon status, `127.0.0.1:10086`, `daemon.pid`, and extension connection. It does not send browser actions. It starts the daemon only when `--start` is explicitly passed.
+
 Run:
 
 ```powershell
@@ -17,8 +29,8 @@ Run:
 | Observed state | Action |
 |---|---|
 | Binary missing | If the user asked to install it, use the official installer. Otherwise confirm before running downloaded code. |
-| `running: false` | Start the daemon. |
-| `running: true`, `extension_connected: false` | Ask the user to open the browser and verify that the [Kimi WebBridge extension](https://chromewebstore.google.com/detail/kimi-webbridge/fldmhceldgbpfpkbgopacenieobmligc?pli=1) is installed and enabled. |
+| `running: false` | Start the daemon, or use `doctor.py --start --wait-connected 20` when starting is appropriate. |
+| `running: true`, `extension_connected: false` | Wait briefly with `doctor.py --wait-connected 20`; if still disconnected, ask the user to open the browser and verify that the [Kimi WebBridge extension](https://chromewebstore.google.com/detail/kimi-webbridge/fldmhceldgbpfpkbgopacenieobmligc?pli=1) is installed and enabled. |
 | Both fields are `true` | Return to `SKILL.md` and send browser commands. |
 
 Prerequisite links:
@@ -46,6 +58,7 @@ curl -fsSL https://cdn.kimi.com/webbridge/install.sh | bash
 | Restart | `& "$env:USERPROFILE\.kimi-webbridge\bin\kimi-webbridge.exe" restart` | `~/.kimi-webbridge/bin/kimi-webbridge restart` |
 | Recent logs | `& "$env:USERPROFILE\.kimi-webbridge\bin\kimi-webbridge.exe" logs -n 100` | `~/.kimi-webbridge/bin/kimi-webbridge logs -n 100` |
 | Previous logs | `& "$env:USERPROFILE\.kimi-webbridge\bin\kimi-webbridge.exe" logs --prev` | `~/.kimi-webbridge/bin/kimi-webbridge logs --prev` |
+| Doctor | `py -3 scripts\doctor.py --wait-connected 20` | `python3 scripts/doctor.py --wait-connected 20` |
 
 ## Diagnose failures
 
@@ -56,6 +69,8 @@ curl -fsSL https://cdn.kimi.com/webbridge/install.sh | bash
 | Extension remains disconnected | Open the browser, install or enable the Chrome Web Store extension, and retry status. |
 | Extension is connected but actions fail | Read logs for version, multi-browser, or extension-upgrade errors. |
 | The error asks for an extension update | Update the extension from the Chrome Web Store link above; do not repeatedly retry the action. |
+
+`status.extension_id` may differ from the Chrome Web Store URL ID. Treat `running=true` plus `extension_connected=true` as the authoritative readiness signal, and use the ID only as supporting diagnostic context.
 
 ## Recover a stale PID
 
