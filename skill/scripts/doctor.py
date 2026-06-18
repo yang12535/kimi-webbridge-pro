@@ -6,7 +6,6 @@ import json
 import os
 import socket
 import subprocess
-import sys
 import time
 from pathlib import Path
 
@@ -52,6 +51,8 @@ def run_binary(binary, *args, timeout=10):
         return {"returncode": None, "stdout": "", "stderr": "binary not found"}
     except subprocess.TimeoutExpired:
         return {"returncode": None, "stdout": "", "stderr": "command timed out"}
+    except OSError as error:
+        return {"returncode": None, "stdout": "", "stderr": str(error)}
     return {
         "returncode": completed.returncode,
         "stdout": completed.stdout,

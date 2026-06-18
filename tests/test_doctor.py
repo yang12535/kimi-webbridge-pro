@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 SCRIPTS_DIR = Path(__file__).parents[1] / "skill" / "scripts"
@@ -25,6 +26,14 @@ class DoctorTests(unittest.TestCase):
 
         self.assertIsNone(status)
         self.assertIn("invalid status JSON", error)
+
+    def test_run_binary_reports_os_errors(self):
+        with patch.object(doctor.subprocess, "run", side_effect=PermissionError("denied")):
+            result = doctor.run_binary(Path("fake-binary"), "status")
+
+        self.assertIsNone(result["returncode"])
+        self.assertEqual(result["stdout"], "")
+        self.assertIn("denied", result["stderr"])
 
     def test_recommends_waiting_for_disconnected_extension(self):
         report = {
