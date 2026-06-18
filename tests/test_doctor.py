@@ -49,6 +49,20 @@ class DoctorTests(unittest.TestCase):
             any("--wait-connected" in item for item in recommendations)
         )
 
+    def test_ready_requires_reachable_daemon_port(self):
+        report = {
+            "binary": {"exists": True},
+            "status": {"running": True, "extension_connected": True},
+            "pid_file": {"exists": False},
+            "port_open": False,
+        }
+
+        self.assertFalse(doctor.report_ready(report))
+
+        recommendations = doctor.build_recommendations(report)
+        self.assertFalse(any(item.startswith("Ready:") for item in recommendations))
+        self.assertTrue(any("port 10086 is not reachable" in item for item in recommendations))
+
     def test_extension_id_mismatch_is_not_hard_failure(self):
         report = {
             "binary": {"exists": True},

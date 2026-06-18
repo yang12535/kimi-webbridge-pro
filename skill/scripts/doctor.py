@@ -128,12 +128,20 @@ def status_snapshot(binary, daemon_host, daemon_port):
     }
 
 
+def report_ready(report):
+    status = report.get("status") or {}
+    return bool(
+        status.get("running")
+        and status.get("extension_connected")
+        and report.get("port_open")
+    )
+
+
 def wait_for_extension(binary, daemon_host, daemon_port, timeout, interval):
     deadline = time.monotonic() + timeout
     last = status_snapshot(binary, daemon_host, daemon_port)
     while time.monotonic() < deadline:
-        status = last.get("status") or {}
-        if status.get("running") and status.get("extension_connected"):
+        if report_ready(last):
             return last
         time.sleep(interval)
         last = status_snapshot(binary, daemon_host, daemon_port)
@@ -156,8 +164,14 @@ def build_recommendations(report):
         recommendations.append(
             "Open Chrome and enable the Kimi WebBridge extension; rerun with --wait-connected before giving up."
         )
+    elif not report.get("port_open"):
+        recommendations.append(
+            "Daemon reports running and the extension is connected, but port 10086 is not reachable; inspect logs or restart once."
+        )
     else:
-        recommendations.append("Ready: daemon is running and the browser extension is connected.")
+        recommendations.append(
+            "Ready: daemon is running, the browser extension is connected, and the daemon port is reachable."
+        )
 
     if pid.get("stale"):
         recommendations.append(
@@ -170,7 +184,7 @@ def build_recommendations(report):
             "Do not treat extension_id mismatch with the Chrome Web Store URL as a hard failure; status connectivity is authoritative."
         )
 
-    if status.get("running") and not report.get("port_open"):
+    if status.get("running") and not report.get("port_open") and not status.get("extension_connected"):
         recommendations.append("Daemon reports running but port 10086 is not reachable; inspect logs or restart once.")
 
     return recommendations
@@ -218,10 +232,7 @@ def main():
     if start_result is not None:
         report["start"] = start_result
     report["pid_file"] = inspect_pid_file(args.pid_file)
-    report["ready"] = bool(
-        (report.get("status") or {}).get("running")
-        and (report.get("status") or {}).get("extension_connected")
-    )
+    report["ready"] = report_ready(report)
     report["recommendations"] = build_recommendations(report)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     raise SystemExit(0 if report["ready"] else 1)
