@@ -55,7 +55,7 @@ If `extension_connected` remains false, open the browser and confirm the Kimi We
 
 Interpret the doctor report as follows:
 
-- `ready: true`: the daemon is running and the extension is connected.
+- `ready: true`: the daemon is running, the extension is connected, and the daemon port is reachable.
 - `ready: false` with `status.running: false`: start the daemon, or use `doctor.py --start --wait-connected 20` when starting it is appropriate.
 - `ready: false` with `status.running: true` and `status.extension_connected: false`: open Chrome, install or enable the extension, and rerun `doctor.py`.
 - `pid_file.stale: true`: remove `daemon.pid` only after verifying the recorded process is gone, then restart the daemon.
@@ -97,7 +97,7 @@ curl -fsSL https://cdn.kimi.com/webbridge/install.sh | bash
 | Extension is connected but actions fail | Read logs for version, multi-browser, or extension-upgrade errors. |
 | The error asks for an extension update | Update the extension from the Chrome Web Store link above; do not repeatedly retry the action. |
 
-`status.extension_id` may differ from the Chrome Web Store URL ID. Treat `running=true` plus `extension_connected=true` as the authoritative readiness signal, and use the ID only as supporting diagnostic context.
+`status.extension_id` may differ from the Chrome Web Store URL ID. Treat `doctor.py`'s `ready` result as the authoritative readiness signal because it includes daemon status, extension connectivity, and the `127.0.0.1:10086` port probe; use the ID only as supporting diagnostic context.
 
 ## Recover a stale PID
 
