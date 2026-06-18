@@ -206,7 +206,9 @@ kimi-webbridge-pro/
         ├── webbridge_client.py
         └── screenshot.ps1
 └── tests/
-    └── test_snapshot.py
+    ├── test_doctor.py
+    ├── test_snapshot.py
+    └── test_wait_for.py
 ```
 
 - `SKILL.md`：Agent 正常执行时读取的操作手册

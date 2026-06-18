@@ -20,6 +20,9 @@ param(
 if ($Action -eq "close_session" -and -not $Force) {
     throw "Refusing close_session without -Force; verify every tab is task-owned."
 }
+if ($Action -eq "close_session" -and $Force) {
+    Write-Warning "Forced close_session can close every tab attached to this session. Run list_tabs first and verify they are task-owned."
+}
 
 # Keep the daemon envelope consistent across every action.
 $body = [ordered]@{

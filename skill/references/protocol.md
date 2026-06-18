@@ -131,6 +131,12 @@ python3 scripts/wait_for.py --session demo \
 - Keep large or sensitive artifacts on disk rather than returning their contents in command output.
 - Remove temporary artifacts after inspection unless the user requested a retained file.
 
+### Advanced action privacy
+
+- Use `upload` only for local files the user explicitly confirmed. Do not construct hidden upload requests.
+- Treat `save_as_pdf` outputs as sensitive artifacts. Delete temporary PDFs after use unless the user asked to keep them.
+- Use `network` only for task-scoped diagnosis. Filter narrowly and avoid unrelated request bodies.
+
 ## Interaction rules
 
 - Prefer snapshot refs over CSS selectors.
@@ -206,4 +212,4 @@ For localhost apps where the task owns a fresh tab:
 3. Take `snapshot.py --mode compact` and use `@e` refs for login, edit, or toolbar controls.
 4. After every click that should open a modal or update an SPA, call `wait_for.py --text-contains ...` or take a fresh compact snapshot.
 5. Use `evaluate` only for bounded state checks such as `location.href`, modal class names, title text, or console error arrays.
-6. Call `list_tabs`; if all listed tabs are task-owned, close with `close_tab` or forced `close_session`.
+6. Call `list_tabs`; if the selected tab is task-owned, close it with `close_tab`. Use forced `close_session` only for advanced batch cleanup after verifying every session tab is task-owned.

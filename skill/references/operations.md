@@ -33,6 +33,33 @@ Run:
 | `running: true`, `extension_connected: false` | Wait briefly with `doctor.py --wait-connected 20`; if still disconnected, ask the user to open the browser and verify that the [Kimi WebBridge extension](https://chromewebstore.google.com/detail/kimi-webbridge/fldmhceldgbpfpkbgopacenieobmligc?pli=1) is installed and enabled. |
 | Both fields are `true` | Return to `SKILL.md` and send browser commands. |
 
+## Post-install verification
+
+Use the readiness smoke test after installing or updating the skill. It checks the local daemon and lists tabs without opening, closing, or modifying browser pages.
+
+PowerShell:
+
+```powershell
+py -3 scripts\doctor.py --wait-connected 20
+& scripts\invoke.ps1 -Session "kimi-webbridge-pro-smoke" -Action "list_tabs"
+```
+
+POSIX:
+
+```bash
+python3 scripts/doctor.py --wait-connected 20
+scripts/invoke.sh --session kimi-webbridge-pro-smoke --action list_tabs
+```
+
+If `extension_connected` remains false, open the browser and confirm the Kimi WebBridge extension is installed and enabled, then rerun the readiness smoke test. Run page-changing smoke tests only when you intentionally want to open a task-owned tab.
+
+Interpret the doctor report as follows:
+
+- `ready: true`: the daemon is running and the extension is connected.
+- `ready: false` with `status.running: false`: start the daemon, or use `doctor.py --start --wait-connected 20` when starting it is appropriate.
+- `ready: false` with `status.running: true` and `status.extension_connected: false`: open Chrome, install or enable the extension, and rerun `doctor.py`.
+- `pid_file.stale: true`: remove `daemon.pid` only after verifying the recorded process is gone, then restart the daemon.
+
 Prerequisite links:
 
 - Kimi WebBridge documentation and daemon setup: `https://www.kimi.com/zh-cn/features/webbridge`

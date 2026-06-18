@@ -93,6 +93,9 @@ if [[ "$action" == "close_session" && "$force" != true ]]; then
   echo "Refusing close_session without --force; verify every tab is task-owned." >&2
   exit 2
 fi
+if [[ "$action" == "close_session" && "$force" == true ]]; then
+  echo "Warning: forced close_session can close every tab attached to this session. Run list_tabs first and verify they are task-owned." >&2
+fi
 
 if [[ -n "$args_file" ]]; then
   [[ -f "$args_file" ]] || { echo "Arguments file not found: $args_file" >&2; exit 2; }
