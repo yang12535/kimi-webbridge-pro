@@ -14,7 +14,12 @@ def parse_args():
     parser.add_argument("--session", help="Stable task session name")
     parser.add_argument("--url-contains")
     parser.add_argument("--title-contains")
-    parser.add_argument("--text-contains")
+    parser.add_argument(
+        "--text-contains",
+        "--visible-text",
+        dest="text_contains",
+        help="Wait until accessible text contains this value.",
+    )
     parser.add_argument("--timeout", type=float, default=10)
     parser.add_argument("--interval", type=float, default=1)
     parser.add_argument(

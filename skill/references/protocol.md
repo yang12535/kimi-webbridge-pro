@@ -85,12 +85,25 @@ Wait for an expected URL, title, or visible accessibility text:
 ```powershell
 py -3 scripts\wait_for.py --session demo `
   --url-contains "zhuanlan.zhihu.com" --timeout 10
+py -3 scripts\wait_for.py --session demo `
+  --text-contains "已保存" --timeout 10
 ```
 
 ```bash
 python3 scripts/wait_for.py --session demo \
   --url-contains "zhuanlan.zhihu.com" --timeout 10
+python3 scripts/wait_for.py --session demo \
+  --text-contains "Saved" --timeout 10
 ```
+
+`wait_for.py` accepts these condition flags:
+
+| Flag | Meaning |
+|---|---|
+| `--url-contains` | Current tab URL contains the value. |
+| `--title-contains` | Current tab title contains the value. |
+| `--text-contains` | Accessibility tree text contains the value. |
+| `--visible-text` | Alias for `--text-contains`; prefer `--text-contains` in docs. |
 
 ## Actions
 
@@ -117,6 +130,12 @@ python3 scripts/wait_for.py --session demo \
 - Treat network headers and bodies as sensitive. Do not collect `Cookie`, `Set-Cookie`, `Authorization`, or token-bearing payloads.
 - Keep large or sensitive artifacts on disk rather than returning their contents in command output.
 - Remove temporary artifacts after inspection unless the user requested a retained file.
+
+### Advanced action privacy
+
+- Use `upload` only for local files the user explicitly confirmed. Do not construct hidden upload requests.
+- Treat `save_as_pdf` outputs as sensitive artifacts. Delete temporary PDFs after use unless the user asked to keep them.
+- Use `network` only for task-scoped diagnosis. Filter narrowly and avoid unrelated request bodies.
 
 ## Interaction rules
 
@@ -183,3 +202,14 @@ scripts/invoke.sh --session demo --action close_session --force
 ```
 
 Before forcing the close, call `list_tabs` and verify that every listed tab was created for the task. Prefer `close_tab` when ownership is mixed or uncertain.
+
+## Local web app smoke-test recipe
+
+For localhost apps where the task owns a fresh tab:
+
+1. Run `doctor.py --wait-connected 20`; proceed only when ready.
+2. Call `navigate` with `newTab:true` and a stable `group_title`.
+3. Take `snapshot.py --mode compact` and use `@e` refs for login, edit, or toolbar controls.
+4. After every click that should open a modal or update an SPA, call `wait_for.py --text-contains ...` or take a fresh compact snapshot.
+5. Use `evaluate` only for bounded state checks such as `location.href`, modal class names, title text, or console error arrays.
+6. Call `list_tabs`; if the selected tab is task-owned, close it with `close_tab`. Use forced `close_session` only for advanced batch cleanup after verifying every session tab is task-owned.

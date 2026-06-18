@@ -40,6 +40,7 @@ Kimi WebBridge Pro 是一个独立的 Agent skill，通过本机 Kimi WebBridge 
 | Windows 原生 helper | 使用 PowerShell 对象构造 UTF-8 JSON，避免命令行转义问题 |
 | Bash 调用 helper | 无 `jq` 依赖，支持从 UTF-8 JSON 文件读取中文和复杂参数 |
 | Snapshot 控制 | 可输出精简 UI 摘要，或把完整快照写入临时文件 |
+| Doctor 自检 | 检查 daemon binary、status、端口、PID 文件和扩展连接，可短轮询等待连接 |
 | 跨平台截图 | Python helper 兼容 daemon 路径响应和旧版 base64 响应 |
 | 智能等待 | 按 URL、标题或可访问性文本轮询，不重复原始点击 |
 | 标签页所有权 | 区分用户原有标签页和任务新建标签页，避免误关页面 |
@@ -108,7 +109,25 @@ cp -R kimi-webbridge-pro/skill/. ~/.codex/skills/kimi-webbridge-pro/
 
 重新启动 Agent 或打开新会话，使 skill 列表重新加载。
 
-### 3. 调用
+### 3. 自检
+
+在发送浏览器动作前，先确认 daemon 和扩展都已就绪：
+
+Windows：
+
+```powershell
+py -3 .\kimi-webbridge-pro\skill\scripts\doctor.py --wait-connected 20
+```
+
+Linux / macOS：
+
+```bash
+python3 ./kimi-webbridge-pro/skill/scripts/doctor.py --wait-connected 20
+```
+
+`doctor.py` 默认不启动 daemon，也不发送浏览器动作。只有显式传入 `--start` 时才会尝试启动 daemon。
+
+### 4. 调用
 
 ```text
 使用 $kimi-webbridge-pro 查看我当前登录的网页。
@@ -180,13 +199,16 @@ kimi-webbridge-pro/
     └── scripts/
         ├── invoke.ps1
         ├── invoke.sh
+        ├── doctor.py
         ├── screenshot.py
         ├── snapshot.py
         ├── wait_for.py
         ├── webbridge_client.py
         └── screenshot.ps1
 └── tests/
-    └── test_snapshot.py
+    ├── test_doctor.py
+    ├── test_snapshot.py
+    └── test_wait_for.py
 ```
 
 - `SKILL.md`：Agent 正常执行时读取的操作手册
@@ -257,12 +279,20 @@ python3 ./skill/scripts/snapshot.py --session demo --mode file
 
 Windows 应使用 `py -3` 或 `py` 启动 Python，不要假定存在 `python3` 命令。
 
+Doctor 自检：
+
+```powershell
+py -3 .\skill\scripts\doctor.py --wait-connected 20
+```
+
 跨平台截图与等待：
 
 ```powershell
 py -3 .\skill\scripts\screenshot.py --session demo
 py -3 .\skill\scripts\wait_for.py --session demo `
   --url-contains "example.com" --timeout 10
+py -3 .\skill\scripts\wait_for.py --session demo `
+  --visible-text "已保存" --timeout 10
 ```
 
 回归测试：
