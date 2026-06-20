@@ -14,7 +14,7 @@ py -3 scripts\doctor.py --wait-connected 20
 python3 scripts/doctor.py --wait-connected 20
 ```
 
-`doctor.py` checks the binary path, daemon status, `127.0.0.1:10086`, `daemon.pid`, and extension connection. It does not send browser actions. It starts the daemon only when `--start` is explicitly passed.
+`doctor.py` checks the binary path, daemon status, `127.0.0.1:10086`, `daemon.pid`, and extension connection. It always prints JSON and accepts `--json` as an explicit compatibility flag for agents that require one. It does not send browser actions. It starts the daemon only when `--start` is explicitly passed.
 
 Run:
 
@@ -56,6 +56,7 @@ If `extension_connected` remains false, open the browser and confirm the Kimi We
 Interpret the doctor report as follows:
 
 - `ready: true`: the daemon is running, the extension is connected, and the daemon port is reachable.
+- `reason`: a short machine-readable readiness summary such as `ready`, `daemon not running`, `extension not connected`, or `daemon port not reachable`.
 - `ready: false` with `status.running: false`: start the daemon, or use `doctor.py --start --wait-connected 20` when starting it is appropriate.
 - `ready: false` with `status.running: true` and `status.extension_connected: false`: open Chrome, install or enable the extension, and rerun `doctor.py`.
 - `pid_file.stale: true`: remove `daemon.pid` only after verifying the recorded process is gone, then restart the daemon.

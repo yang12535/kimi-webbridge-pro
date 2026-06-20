@@ -3,7 +3,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $Action,
 
-    [hashtable] $ActionArgs = @{},
+    [object] $ActionArgs = @{},
+
+    [string] $ArgsFile,
 
     [string] $Session,
 
@@ -22,6 +24,37 @@ if ($Action -eq "close_session" -and -not $Force) {
 }
 if ($Action -eq "close_session" -and $Force) {
     Write-Warning "Forced close_session can close every tab attached to this session. Run list_tabs first and verify they are task-owned."
+}
+
+if ($ArgsFile) {
+    $hasInlineArgs = $false
+    if ($null -ne $ActionArgs) {
+        if ($ActionArgs -is [System.Collections.IDictionary]) {
+            $hasInlineArgs = $ActionArgs.Count -gt 0
+        }
+        else {
+            $hasInlineArgs = $true
+        }
+    }
+    if ($hasInlineArgs) {
+        throw "Use either -ActionArgs or -ArgsFile, not both."
+    }
+    if (-not (Test-Path -LiteralPath $ArgsFile -PathType Leaf)) {
+        throw "Arguments file not found: $ArgsFile"
+    }
+    $argsJson = Get-Content -LiteralPath $ArgsFile -Raw -Encoding UTF8
+    if ([string]::IsNullOrWhiteSpace($argsJson)) {
+        throw "Arguments file is empty: $ArgsFile"
+    }
+    try {
+        $ActionArgs = $argsJson | ConvertFrom-Json
+    }
+    catch {
+        throw "Arguments file must contain valid UTF-8 JSON: $($_.Exception.Message)"
+    }
+    if ($null -eq $ActionArgs -or $ActionArgs -is [array] -or $ActionArgs -is [string] -or $ActionArgs -is [ValueType]) {
+        throw "Arguments file must contain a JSON object."
+    }
 }
 
 # Keep the daemon envelope consistent across every action.
