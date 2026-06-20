@@ -63,17 +63,14 @@ def compact_snapshot(response, max_elements, max_name_length):
     elements = []
 
     # Keep semantic landmarks and actionable refs; omit most static text.
-    def walk(nodes):
-        if len(elements) >= max_elements:
-            return
+    stack = [data.get("tree")]
+    while stack and len(elements) < max_elements:
+        nodes = stack.pop()
         if isinstance(nodes, list):
-            for node in nodes:
-                walk(node)
-                if len(elements) >= max_elements:
-                    return
-            return
+            stack.extend(reversed(nodes))
+            continue
         if not isinstance(nodes, dict):
-            return
+            continue
 
         role = nodes.get("role")
         ref = nodes.get("ref")
@@ -91,9 +88,9 @@ def compact_snapshot(response, max_elements, max_name_length):
                 else:
                     item["usage"] = f"use selector {ref} with click or fill"
             elements.append(item)
-        walk(nodes.get("children"))
-
-    walk(data.get("tree"))
+        children = nodes.get("children")
+        if children is not None:
+            stack.append(children)
     return {
         "ok": response.get("ok"),
         "url": data.get("url"),

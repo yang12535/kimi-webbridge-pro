@@ -5,6 +5,7 @@ set -euo pipefail
 action=""
 session=""
 args_json="{}"
+args_json_set=false
 args_file=""
 output_path=""
 daemon_url="http://127.0.0.1:10086"
@@ -44,6 +45,7 @@ while (($#)); do
       ;;
     -j|--args-json)
       args_json="${2:?missing JSON}"
+      args_json_set=true
       shift 2
       ;;
     -f|--args-file)
@@ -95,6 +97,11 @@ if [[ "$action" == "close_session" && "$force" != true ]]; then
 fi
 if [[ "$action" == "close_session" && "$force" == true ]]; then
   echo "Warning: forced close_session can close every tab attached to this session. Run list_tabs first and verify they are task-owned." >&2
+fi
+
+if [[ -n "$args_file" && "$args_json_set" == true ]]; then
+  echo "Use either --args-json or --args-file, not both." >&2
+  exit 2
 fi
 
 if [[ -n "$args_file" ]]; then

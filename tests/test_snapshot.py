@@ -70,6 +70,26 @@ class CompactSnapshotTests(unittest.TestCase):
         self.assertEqual(len(result["elements"]), 1)
         self.assertTrue(result["truncated"])
 
+    def test_compact_snapshot_handles_deep_trees_iteratively(self):
+        tree = {"role": "heading", "name": "deep leaf"}
+        for _ in range(3000):
+            tree = {"role": "generic", "children": [tree]}
+
+        result = compact_snapshot(
+            {
+                "ok": True,
+                "data": {
+                    "url": "https://example.com",
+                    "title": "Deep",
+                    "tree": tree,
+                },
+            },
+            max_elements=10,
+            max_name_length=240,
+        )
+
+        self.assertEqual(result["elements"], [{"role": "heading", "name": "deep leaf"}])
+
     def test_auto_mode_returns_compact_for_small_snapshots(self):
         response = {
             "ok": True,

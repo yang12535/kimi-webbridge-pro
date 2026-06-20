@@ -21,6 +21,20 @@ class WaitForArgumentTests(unittest.TestCase):
 
         self.assertEqual(args.text_contains, "Ready")
 
+    def test_iter_names_handles_deep_trees_iteratively(self):
+        tree = {"name": "deep leaf"}
+        for _ in range(3000):
+            tree = {"children": [tree]}
+
+        self.assertEqual(list(wait_for.iter_names(tree)), ["deep leaf"])
+
+    def test_sleep_until_deadline_clamps_to_remaining_time(self):
+        with patch.object(wait_for.time, "monotonic", return_value=3.0):
+            with patch.object(wait_for.time, "sleep") as sleep:
+                self.assertTrue(wait_for.sleep_until_deadline(5.0, 10.0))
+
+        sleep.assert_called_once_with(2.0)
+
 
 if __name__ == "__main__":
     unittest.main()

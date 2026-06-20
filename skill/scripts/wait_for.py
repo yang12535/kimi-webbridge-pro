@@ -31,14 +31,18 @@ def parse_args():
 
 
 def iter_names(nodes):
-    if isinstance(nodes, list):
-        for node in nodes:
-            yield from iter_names(node)
-    elif isinstance(nodes, dict):
-        name = nodes.get("name")
-        if name:
-            yield str(name)
-        yield from iter_names(nodes.get("children"))
+    stack = [nodes]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, list):
+            stack.extend(reversed(current))
+        elif isinstance(current, dict):
+            name = current.get("name")
+            if name:
+                yield str(name)
+            children = current.get("children")
+            if children is not None:
+                stack.append(children)
 
 
 def matches(args, data):
@@ -55,6 +59,14 @@ def matches(args, data):
     return True
 
 
+def sleep_until_deadline(deadline, interval):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return False
+    time.sleep(min(interval, remaining))
+    return True
+
+
 def main():
     configure_utf8_output()
     args = parse_args()
@@ -66,13 +78,14 @@ def main():
     deadline = time.monotonic() + args.timeout
     last_data = {}
     while True:
+        remaining = deadline - time.monotonic()
         try:
             response = post_command(
                 action="snapshot",
                 args={},
                 session=args.session,
                 daemon_url=args.daemon_url,
-                timeout=max(1, int(args.interval + 5)),
+                timeout=max(0.1, min(args.interval + 5, remaining)),
             )
         except RuntimeError as error:
             raise SystemExit(str(error)) from error
@@ -91,9 +104,8 @@ def main():
                 )
             )
             return
-        if time.monotonic() >= deadline:
+        if not sleep_until_deadline(deadline, args.interval):
             break
-        time.sleep(args.interval)
 
     print(
         json.dumps(

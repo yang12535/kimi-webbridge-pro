@@ -64,6 +64,23 @@ class DoctorTests(unittest.TestCase):
         self.assertTrue(any("port 10086 is not reachable" in item for item in recommendations))
         self.assertEqual(doctor.readiness_reason(report), "daemon port not reachable")
 
+    def test_port_failure_takes_priority_over_extension_failure(self):
+        report = {
+            "binary": {"exists": True},
+            "status": {"running": True, "extension_connected": False},
+            "pid_file": {"exists": False},
+            "port_open": False,
+        }
+
+        recommendations = doctor.build_recommendations(report)
+
+        self.assertEqual(doctor.readiness_reason(report), "daemon port not reachable")
+        self.assertIn("port 10086 is not reachable", recommendations[0])
+        self.assertFalse(
+            any("enable the Kimi WebBridge extension" in item for item in recommendations),
+            recommendations,
+        )
+
     def test_readiness_reason_reports_extension_disconnect(self):
         report = {
             "binary": {"exists": True},
@@ -107,6 +124,20 @@ class DoctorTests(unittest.TestCase):
         recommendations = doctor.build_recommendations(report)
 
         self.assertTrue(any("daemon.pid" in item for item in recommendations))
+
+    def test_sleep_until_deadline_clamps_to_remaining_time(self):
+        with patch.object(doctor.time, "monotonic", return_value=3.0):
+            with patch.object(doctor.time, "sleep") as sleep:
+                self.assertTrue(doctor.sleep_until_deadline(5.0, 10.0))
+
+        sleep.assert_called_once_with(2.0)
+
+    def test_sleep_until_deadline_skips_elapsed_deadline(self):
+        with patch.object(doctor.time, "monotonic", return_value=5.0):
+            with patch.object(doctor.time, "sleep") as sleep:
+                self.assertFalse(doctor.sleep_until_deadline(5.0, 10.0))
+
+        sleep.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -1,5 +1,19 @@
 # Changed
 
+## Unreleased
+
+### Fixed
+
+- Aligned `doctor.py` readiness `reason` and recommendations when the daemon reports running but its port is unreachable.
+- Clamped `doctor.py` and `wait_for.py` polling sleeps to the remaining timeout when `--interval` exceeds `--timeout`.
+- Replaced recursive accessibility-tree walking in `snapshot.py` and `wait_for.py` with iterative traversal to avoid `RecursionError` on deeply nested pages.
+- Made `invoke.sh` reject simultaneous `--args-json` and `--args-file`, matching the PowerShell helper.
+- Preserved daemon error bodies from non-2xx `Invoke-RestMethod` failures in PowerShell helpers.
+
+### Validation
+
+- Added Linux mock-daemon CLI tests for `invoke.sh`, `snapshot.py`, `wait_for.py`, and `screenshot.py`.
+
 ## v1.0.0 - 2026-06-20
 
 First formal release of Kimi WebBridge Pro as an agent-neutral browser-control skill.
@@ -33,4 +47,3 @@ First formal release of Kimi WebBridge Pro as an agent-neutral browser-control s
 
 - Daemon-side automatic tab switching after clicks remains outside this skill repository.
 - Stitched full-page screenshots are deferred until there is a stable screenshot/scroll contract and an explicit image dependency decision.
-

@@ -153,13 +153,22 @@ def readiness_reason(report):
     return "ready"
 
 
+def sleep_until_deadline(deadline, interval):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return False
+    time.sleep(min(interval, remaining))
+    return True
+
+
 def wait_for_extension(binary, daemon_host, daemon_port, timeout, interval):
     deadline = time.monotonic() + timeout
     last = status_snapshot(binary, daemon_host, daemon_port)
-    while time.monotonic() < deadline:
+    while True:
         if report_ready(last):
             return last
-        time.sleep(interval)
+        if not sleep_until_deadline(deadline, interval):
+            break
         last = status_snapshot(binary, daemon_host, daemon_port)
     return last
 
@@ -176,13 +185,13 @@ def build_recommendations(report):
         recommendations.append("Read daemon status output and recent logs; status JSON was unavailable.")
     elif not status.get("running"):
         recommendations.append("Start the daemon, then rerun doctor with --wait-connected.")
+    elif not report.get("port_open"):
+        recommendations.append(
+            "Daemon reports running but port 10086 is not reachable; inspect logs or restart once."
+        )
     elif not status.get("extension_connected"):
         recommendations.append(
             "Open Chrome and enable the Kimi WebBridge extension; rerun with --wait-connected before giving up."
-        )
-    elif not report.get("port_open"):
-        recommendations.append(
-            "Daemon reports running and the extension is connected, but port 10086 is not reachable; inspect logs or restart once."
         )
     else:
         recommendations.append(
@@ -199,9 +208,6 @@ def build_recommendations(report):
         recommendations.append(
             "Do not treat extension_id mismatch with the Chrome Web Store URL as a hard failure; status connectivity is authoritative."
         )
-
-    if status.get("running") and not report.get("port_open") and not status.get("extension_connected"):
-        recommendations.append("Daemon reports running but port 10086 is not reachable; inspect logs or restart once.")
 
     return recommendations
 
