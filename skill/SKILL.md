@@ -23,6 +23,17 @@ Control the user's live browser through the daemon at `http://127.0.0.1:10086`.
 2. Assign one stable `session` name for the task.
 3. Use `find_tab` for user-owned existing tabs, or `navigate` with `newTab:true` for task-owned tabs.
 
+## Quick decision tree
+
+- Need the user's existing login state or current tab? Use `find_tab`, then take a snapshot.
+- Need an isolated tab you can close later? Use `navigate` with `newTab:true`.
+- Page size is unknown? Start with `snapshot.py --auto`.
+- Need controls only? Use `snapshot.py --mode compact`.
+- Need article text, long static content, or Chinese text extraction? Use `snapshot.py --mode file` and read only the relevant file sections.
+- Sending Chinese, nested JSON, or quote-heavy arguments? Use a UTF-8 args file instead of inline shell quoting.
+- After `navigate` or a click that should change state? Run `wait_for.py`, then take a fresh snapshot and inspect URL/title.
+- Click appears unchanged? Check `list_tabs`, popup blocking, then recover the real link with bounded `evaluate`.
+
 ## Quick action map
 
 Use this as the minimum dashboard. Read [protocol.md](references/protocol.md) for full action arguments, advanced actions, and response details.
@@ -40,6 +51,7 @@ Use this as the minimum dashboard. Read [protocol.md](references/protocol.md) fo
 | `close_tab` | Close the selected task-owned tab after verification. |
 
 Treat `close_session`, `upload`, `save_as_pdf`, and `network` as advanced actions; load [protocol.md](references/protocol.md) before using them.
+For worked examples, read only the relevant file under [examples](examples/): form filling, long-page extraction, popup recovery, or network debugging.
 
 ## Use helpers
 
@@ -57,6 +69,15 @@ PowerShell:
 }
 ```
 
+For non-ASCII or complex PowerShell arguments, prefer a UTF-8 JSON file:
+
+```powershell
+@'
+{"selector":"@e10","value":"显卡日报：RTX 5090 价格"}
+'@ | Set-Content -LiteralPath .\args.json -Encoding UTF8
+& scripts\invoke.ps1 -Session "research" -Action "fill" -ArgsFile .\args.json
+```
+
 Bash:
 
 ```bash
@@ -67,7 +88,7 @@ scripts/invoke.sh --session research --action navigate \
 For non-ASCII or complex Bash arguments, write UTF-8 JSON to a file and pass `--args-file`. See [protocol.md](references/protocol.md).
 
 Use [screenshot.py](scripts/screenshot.py) for cross-platform screenshots. PowerShell-only workflows may continue using [screenshot.ps1](scripts/screenshot.ps1). Both accept current path-based responses and older base64 responses without flooding context.
-For large or unknown pages, use [snapshot.py](scripts/snapshot.py) in `compact` or `file` mode instead of printing the full snapshot response.
+For large or unknown pages, use [snapshot.py](scripts/snapshot.py) with `--auto` first. It returns compact output for small pages and writes large snapshots to a UTF-8 JSON file.
 Use [doctor.py](scripts/doctor.py) for no-action readiness checks: binary presence, daemon status, port reachability, PID staleness, and extension connection.
 Run Python helpers with `py -3` (or `py`) on Windows and `python3` on POSIX. Do not assume `python3` is the Windows launcher.
 
@@ -112,7 +133,7 @@ User-owned tab workflow: call `find_tab`, take a compact `snapshot`, perform the
 
 1. Assign one stable session name.
 2. Use `find_tab` for a user-owned existing tab, or `navigate` with `newTab:true` for a task-owned tab.
-3. Take a `snapshot`.
+3. Take `snapshot.py --auto` for unknown pages, or `snapshot.py --mode compact` when you only need controls.
 4. Use snapshot `@e` refs with `click` and `fill`.
 5. After navigation or a click that should change the page, use [wait_for.py](scripts/wait_for.py) or poll URL/title up to three times.
 6. Take a new snapshot after a substantial DOM change; old refs may be stale.

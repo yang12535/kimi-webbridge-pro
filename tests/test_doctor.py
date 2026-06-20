@@ -62,6 +62,23 @@ class DoctorTests(unittest.TestCase):
         recommendations = doctor.build_recommendations(report)
         self.assertFalse(any(item.startswith("Ready:") for item in recommendations))
         self.assertTrue(any("port 10086 is not reachable" in item for item in recommendations))
+        self.assertEqual(doctor.readiness_reason(report), "daemon port not reachable")
+
+    def test_readiness_reason_reports_extension_disconnect(self):
+        report = {
+            "binary": {"exists": True},
+            "status": {"running": True, "extension_connected": False},
+            "pid_file": {"exists": False},
+            "port_open": True,
+        }
+
+        self.assertEqual(doctor.readiness_reason(report), "extension not connected")
+
+    def test_json_flag_is_accepted(self):
+        with patch.object(sys, "argv", ["doctor.py", "--json"]):
+            args = doctor.parse_args()
+
+        self.assertTrue(args.json)
 
     def test_extension_id_mismatch_is_not_hard_failure(self):
         report = {

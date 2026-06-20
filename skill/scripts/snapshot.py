@@ -15,9 +15,14 @@ def parse_args():
     parser.add_argument("--session", help="Stable task session name")
     parser.add_argument(
         "--mode",
-        choices=("compact", "file", "full"),
+        choices=("auto", "compact", "file", "full"),
         default="compact",
-        help="compact summary, file path, or full JSON output",
+        help="auto strategy, compact summary, file path, or full JSON output",
+    )
+    parser.add_argument(
+        "--auto",
+        action="store_true",
+        help="Shortcut for --mode auto.",
     )
     parser.add_argument("--output", type=Path, help="Path used by file mode")
     parser.add_argument(
@@ -28,7 +33,16 @@ def parse_args():
     parser.add_argument("--timeout", type=int, default=30)
     parser.add_argument("--max-elements", type=int, default=250)
     parser.add_argument("--max-name-length", type=int, default=240)
-    return parser.parse_args()
+    parser.add_argument(
+        "--auto-file-bytes",
+        type=int,
+        default=120000,
+        help="Auto mode writes a file when the raw snapshot is at least this large.",
+    )
+    args = parser.parse_args()
+    if args.auto:
+        args.mode = "auto"
+    return args
 
 
 def request_snapshot(args):
@@ -111,12 +125,49 @@ def write_snapshot(response, output):
     return output.resolve()
 
 
+def snapshot_size_bytes(response):
+    return len(json.dumps(response, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+
+def auto_snapshot(response, args):
+    raw_bytes = snapshot_size_bytes(response)
+    compact = compact_snapshot(
+        response,
+        max_elements=args.max_elements,
+        max_name_length=args.max_name_length,
+    )
+    should_write_file = raw_bytes >= args.auto_file_bytes or compact["truncated"]
+    if not should_write_file:
+        compact["mode"] = "compact"
+        compact["snapshot_bytes"] = raw_bytes
+        return compact
+
+    path = write_snapshot(response, args.output)
+    return {
+        "ok": response.get("ok"),
+        "mode": "file",
+        "path": str(path),
+        "url": (response.get("data") or {}).get("url"),
+        "title": (response.get("data") or {}).get("title"),
+        "snapshot_bytes": raw_bytes,
+        "reason": (
+            "compact summary reached max-elements"
+            if compact["truncated"]
+            else "raw snapshot exceeds auto-file-bytes"
+        ),
+        "compact_preview": compact,
+    }
+
+
 def main():
     configure_utf8_output()
     args = parse_args()
     response = request_snapshot(args)
 
-    if args.mode == "file":
+    if args.mode == "auto":
+        result = auto_snapshot(response, args)
+        print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+    elif args.mode == "file":
         print(write_snapshot(response, args.output))
     elif args.mode == "full":
         print(json.dumps(response, ensure_ascii=False, separators=(",", ":")))

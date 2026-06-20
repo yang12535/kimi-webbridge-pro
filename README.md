@@ -38,9 +38,10 @@ Kimi WebBridge Pro 是一个独立的 Agent skill，通过本机 Kimi WebBridge 
 | 能力 | 说明 |
 |---|---|
 | Windows 原生 helper | 使用 PowerShell 对象构造 UTF-8 JSON，避免命令行转义问题 |
+| UTF-8 参数文件 | PowerShell 和 Bash 均支持从 JSON 文件读取中文、特殊字符和嵌套参数 |
 | Bash 调用 helper | 无 `jq` 依赖，支持从 UTF-8 JSON 文件读取中文和复杂参数 |
-| Snapshot 控制 | 可输出精简 UI 摘要，或把完整快照写入临时文件 |
-| Doctor 自检 | 检查 daemon binary、status、端口、PID 文件和扩展连接，可短轮询等待连接 |
+| Snapshot 控制 | 支持自动策略、精简 UI 摘要，或把完整快照写入临时文件 |
+| Doctor 自检 | 检查 daemon binary、status、端口、PID 文件和扩展连接，可短轮询等待连接，并输出 JSON reason |
 | 跨平台截图 | Python helper 兼容 daemon 路径响应和旧版 base64 响应 |
 | 智能等待 | 按 URL、标题或可访问性文本轮询，不重复原始点击 |
 | 标签页所有权 | 区分用户原有标签页和任务新建标签页，避免误关页面 |
@@ -192,6 +193,11 @@ kimi-webbridge-pro/
     ├── SKILL.md
     ├── agents/
     │   └── openai.yaml       # 可选的 OpenAI/Codex UI 元数据
+    ├── examples/
+    │   ├── login_and_fill_form.md
+    │   ├── scroll_and_extract.md
+    │   ├── handle_popup.md
+    │   └── network_debug.md
     ├── references/
     │   ├── protocol.md
     │   ├── operations.md
@@ -212,6 +218,7 @@ kimi-webbridge-pro/
 ```
 
 - `SKILL.md`：Agent 正常执行时读取的操作手册
+- `examples/`：按需读取的端到端工作流样例
 - `protocol.md`：动作参数、响应和隐私约束
 - `operations.md`：安装、状态检查和 daemon 故障恢复
 - `how-it-works.md`：面向人类维护者的原理说明，内容较长，不推荐 Agent 日常加载
@@ -261,6 +268,7 @@ Windows：
 
 ```powershell
 # 精简输出，适合定位输入框、按钮和链接
+py -3 .\skill\scripts\snapshot.py --session demo --auto
 py -3 .\skill\scripts\snapshot.py --session demo --mode compact
 
 # 完整快照保存到临时文件，仅返回文件路径
@@ -271,6 +279,7 @@ Linux / macOS：
 
 ```bash
 # 精简输出，适合定位输入框、按钮和链接
+python3 ./skill/scripts/snapshot.py --session demo --auto
 python3 ./skill/scripts/snapshot.py --session demo --mode compact
 
 # 完整快照保存到临时文件，仅返回文件路径

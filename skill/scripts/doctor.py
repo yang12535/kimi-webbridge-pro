@@ -137,6 +137,22 @@ def report_ready(report):
     )
 
 
+def readiness_reason(report):
+    binary = report.get("binary") or {}
+    status = report.get("status") or {}
+    if not binary.get("exists"):
+        return "binary not found"
+    if not status:
+        return report.get("status_error") or "daemon status unavailable"
+    if not status.get("running"):
+        return "daemon not running"
+    if not report.get("port_open"):
+        return "daemon port not reachable"
+    if not status.get("extension_connected"):
+        return "extension not connected"
+    return "ready"
+
+
 def wait_for_extension(binary, daemon_host, daemon_port, timeout, interval):
     deadline = time.monotonic() + timeout
     last = status_snapshot(binary, daemon_host, daemon_port)
@@ -205,6 +221,11 @@ def parse_args():
         action="store_true",
         help="Start the daemon if it is installed but not running.",
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Compatibility flag; doctor output is always JSON.",
+    )
     return parser.parse_args()
 
 
@@ -233,6 +254,7 @@ def main():
         report["start"] = start_result
     report["pid_file"] = inspect_pid_file(args.pid_file)
     report["ready"] = report_ready(report)
+    report["reason"] = readiness_reason(report)
     report["recommendations"] = build_recommendations(report)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     raise SystemExit(0 if report["ready"] else 1)

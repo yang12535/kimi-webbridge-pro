@@ -26,6 +26,19 @@ PowerShell accepts a hashtable directly:
 }
 ```
 
+For PowerShell, use a UTF-8 JSON file when arguments contain non-ASCII text, nested objects, or complex quoting:
+
+```powershell
+@'
+{
+  "selector": "@e10",
+  "value": "显卡日报：RTX 5090 价格"
+}
+'@ | Set-Content -LiteralPath .\webbridge-args.json -Encoding UTF8
+& scripts\invoke.ps1 -Session "demo" -Action "fill" -ArgsFile .\webbridge-args.json
+Remove-Item -LiteralPath .\webbridge-args.json
+```
+
 For Bash, use a UTF-8 JSON file when arguments contain non-ASCII text or complex quoting:
 
 ```bash
@@ -44,6 +57,10 @@ Both invoke helpers support a no-request payload check:
 } -DryRun
 ```
 
+```powershell
+& scripts\invoke.ps1 -Session demo -Action fill -ArgsFile .\webbridge-args.json -DryRun
+```
+
 ```bash
 scripts/invoke.sh --session demo --action fill \
   --args-file /tmp/webbridge-args.json --dry-run
@@ -53,12 +70,16 @@ Use `snapshot.py` to prevent large snapshot responses from flooding context:
 
 ```powershell
 # Windows: use the Python launcher
+py -3 scripts\snapshot.py --session demo --auto
 py -3 scripts\snapshot.py --session demo --mode compact
 py -3 scripts\snapshot.py --session demo --mode file
 ```
 
 ```bash
 # POSIX
+# Auto: compact for small pages, file path for large pages
+python3 scripts/snapshot.py --session demo --auto
+
 # URL, title, headings, and actionable refs only
 python3 scripts/snapshot.py --session demo --mode compact
 
@@ -66,7 +87,7 @@ python3 scripts/snapshot.py --session demo --mode compact
 python3 scripts/snapshot.py --session demo --mode file
 ```
 
-`compact` is for locating controls. Use `file` when the task requires article text or other static page content, then read only the relevant portions of that file.
+`auto` is the recommended first choice for unfamiliar pages: it returns compact output for small snapshots and writes large or overfull snapshots to a UTF-8 JSON file. `compact` is for locating controls. Use `file` when the task requires article text or other static page content, then read only the relevant portions of that file.
 On Windows, prefer `py -3` or `py`; do not assume a `python3` command exists.
 The Python helpers configure UTF-8 stdout themselves. If an older shell still renders mojibake, use `--mode file` and read the UTF-8 file instead.
 
@@ -176,7 +197,7 @@ python3 scripts/wait_for.py --session demo \
 
 ## Waiting and retrying
 
-- After `navigate` or a click that should change the page, wait about one second, then inspect URL/title or take a new snapshot.
+- After `navigate` or a click that should change the page, run `wait_for.py` for the expected URL, title, or visible text; then take a fresh snapshot and inspect URL/title.
 - Retry the observation up to three times with a short delay when the page is still loading.
 - Do not blindly repeat the click while waiting. Repeated clicks can open duplicate tabs or submit an action twice.
 - If the page remains unchanged, follow the tab and popup recovery flow below.
