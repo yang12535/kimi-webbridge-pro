@@ -12,7 +12,8 @@
 
 ### Validation
 
-- Added Linux mock-daemon CLI tests for `invoke.sh`, `snapshot.py`, `wait_for.py`, and `screenshot.py`.
+- Added cross-platform mock-daemon CLI tests for `invoke.sh`, `snapshot.py`, `wait_for.py`, `screenshot.py`, `invoke.ps1`, and `screenshot.ps1`.
+- Fixed the mock-daemon test harness on Windows by invoking `invoke.sh` through `bash` and decoding subprocess output as UTF-8.
 
 ## v1.0.0 - 2026-06-20
 

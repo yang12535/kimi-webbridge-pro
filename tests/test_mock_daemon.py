@@ -2,6 +2,8 @@
 
 import base64
 import json
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -53,6 +55,15 @@ class MockDaemonHandler(BaseHTTPRequestHandler):
                 }
             else:
                 body = {"ok": True, "data": {"path": self.server.screenshot_path}}
+        elif action == "fail-http":
+            body = {"ok": False, "error": "daemon says no"}
+            encoded = json.dumps(body, ensure_ascii=False).encode("utf-8")
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
         else:
             body = {"ok": True, "data": {"success": True, "echo": payload}}
 
@@ -87,11 +98,16 @@ class MockDaemonCliTests(unittest.TestCase):
         cls.tempdir.cleanup()
 
     def run_cli(self, command, *args, expected=0, timeout=5):
+        env = os.environ.copy()
+        env.setdefault("PYTHONIOENCODING", "utf-8")
         result = subprocess.run(
             [str(command), *args],
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
             timeout=timeout,
         )
         self.assertEqual(result.returncode, expected, result.stderr or result.stdout)
@@ -100,8 +116,52 @@ class MockDaemonCliTests(unittest.TestCase):
     def run_python_cli(self, script, *args, expected=0, timeout=5):
         return self.run_cli(sys.executable, str(script), *args, expected=expected, timeout=timeout)
 
+    def bash_executable(self):
+        candidates = []
+        if os.name == "nt":
+            # Prefer Git for Windows Bash. The Windows WSL launcher is also named
+            # bash.exe but can fail before reaching the script when WSL is disabled.
+            candidates.extend(
+                [
+                    Path("C:/Program Files/Git/bin/bash.exe"),
+                    Path("C:/Program Files/Git/usr/bin/bash.exe"),
+                ]
+            )
+        executable = shutil.which("bash")
+        if executable:
+            candidates.append(Path(executable))
+        for candidate in candidates:
+            if candidate.exists() and "system32" not in str(candidate).lower():
+                return str(candidate)
+        self.skipTest("bash is not available")
+
+    def pwsh_executable(self):
+        executable = shutil.which("pwsh")
+        if not executable:
+            self.skipTest("pwsh is not available")
+        return executable
+
+    def run_bash_cli(self, script, *args, expected=0, timeout=5):
+        return self.run_cli(
+            self.bash_executable(),
+            str(script),
+            *args,
+            expected=expected,
+            timeout=timeout,
+        )
+
+    def run_pwsh_cli(self, *args, expected=0, timeout=5):
+        return self.run_cli(
+            self.pwsh_executable(),
+            "-NoLogo",
+            "-NoProfile",
+            *args,
+            expected=expected,
+            timeout=timeout,
+        )
+
     def test_invoke_sh_posts_to_mock_daemon(self):
-        result = self.run_cli(
+        result = self.run_bash_cli(
             SCRIPTS / "invoke.sh",
             "--daemon-url",
             self.daemon_url,
@@ -119,7 +179,7 @@ class MockDaemonCliTests(unittest.TestCase):
         with tempfile.NamedTemporaryFile("w", encoding="utf-8") as handle:
             handle.write("{}")
             handle.flush()
-            result = self.run_cli(
+            result = self.run_bash_cli(
                 SCRIPTS / "invoke.sh",
                 "--action",
                 "snapshot",
@@ -132,6 +192,74 @@ class MockDaemonCliTests(unittest.TestCase):
             )
 
         self.assertIn("Use either --args-json or --args-file, not both.", result.stderr)
+
+    def test_invoke_ps1_args_file_posts_utf8_json_to_mock_daemon(self):
+        with tempfile.NamedTemporaryFile(
+            "w", encoding="utf-8", suffix=".json", delete=False
+        ) as handle:
+            json.dump(
+                {
+                    "selector": "@e1",
+                    "value": "显卡日报",
+                    "nested": {"enabled": True, "count": 2},
+                },
+                handle,
+                ensure_ascii=False,
+            )
+            args_path = Path(handle.name)
+
+        try:
+            result = self.run_pwsh_cli(
+                "-File",
+                str(SCRIPTS / "invoke.ps1"),
+                "-DaemonUrl",
+                self.daemon_url,
+                "-Action",
+                "fill",
+                "-Session",
+                "mock",
+                "-ArgsFile",
+                str(args_path),
+            )
+        finally:
+            args_path.unlink(missing_ok=True)
+
+        response = json.loads(result.stdout)
+        echo = response["data"]["echo"]
+        self.assertEqual(echo["session"], "mock")
+        self.assertEqual(echo["args"]["selector"], "@e1")
+        self.assertEqual(echo["args"]["value"], "显卡日报")
+        self.assertEqual(echo["args"]["nested"], {"enabled": True, "count": 2})
+
+    def test_invoke_ps1_action_args_dry_run_serializes_hashtable(self):
+        command = (
+            f"& '{SCRIPTS / 'invoke.ps1'}' "
+            "-Action fill "
+            "-ActionArgs @{selector='@e1'; value='显卡日报'; nested=@{enabled=$true; count=2}} "
+            "-Session demo "
+            "-DryRun"
+        )
+
+        result = self.run_pwsh_cli("-Command", command)
+
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["action"], "fill")
+        self.assertEqual(payload["session"], "demo")
+        self.assertEqual(payload["args"]["value"], "显卡日报")
+        self.assertEqual(payload["args"]["nested"], {"enabled": True, "count": 2})
+
+    def test_invoke_ps1_preserves_http_error_body(self):
+        result = self.run_pwsh_cli(
+            "-File",
+            str(SCRIPTS / "invoke.ps1"),
+            "-DaemonUrl",
+            self.daemon_url,
+            "-Action",
+            "fail-http",
+            expected=1,
+        )
+
+        self.assertIn("daemon says no", result.stderr)
 
     def test_snapshot_py_reads_compact_snapshot(self):
         result = self.run_python_cli(
@@ -209,6 +337,34 @@ class MockDaemonCliTests(unittest.TestCase):
             "--session",
             "base64-shot",
             "--output",
+            str(output_path),
+        )
+
+        self.assertEqual(Path(result.stdout.strip()), output_path.resolve())
+        self.assertEqual(output_path.read_bytes(), b"fake-image-bytes")
+
+    def test_screenshot_ps1_accepts_path_response(self):
+        result = self.run_pwsh_cli(
+            "-File",
+            str(SCRIPTS / "screenshot.ps1"),
+            "-DaemonUrl",
+            self.daemon_url,
+            "-Session",
+            "mock",
+        )
+
+        self.assertEqual(Path(result.stdout.strip()), self.screenshot_path.resolve())
+
+    def test_screenshot_ps1_accepts_base64_response(self):
+        output_path = Path(self.tempdir.name) / "base64-ps1.png"
+        result = self.run_pwsh_cli(
+            "-File",
+            str(SCRIPTS / "screenshot.ps1"),
+            "-DaemonUrl",
+            self.daemon_url,
+            "-Session",
+            "base64-shot",
+            "-OutputPath",
             str(output_path),
         )
 
