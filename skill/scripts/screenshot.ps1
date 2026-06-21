@@ -47,6 +47,18 @@ function Get-WebBridgeErrorMessage {
     }
 
     $response = $ErrorRecord.Exception.Response
+    if ($response -and $response.Content) {
+        try {
+            $body = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+            if (-not [string]::IsNullOrWhiteSpace($body)) {
+                return $body
+            }
+        }
+        catch {
+            # Fall back to the Windows PowerShell response stream path below.
+        }
+    }
+
     if ($response -and $response.GetResponseStream) {
         $stream = $response.GetResponseStream()
         if ($stream) {

@@ -79,6 +79,8 @@ def main():
     last_data = {}
     while True:
         remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
         try:
             response = post_command(
                 action="snapshot",

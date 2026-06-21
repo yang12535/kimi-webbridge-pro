@@ -46,7 +46,16 @@ class MockDaemonHandler(BaseHTTPRequestHandler):
                 },
             }
         elif action == "screenshot":
-            if session == "base64-shot":
+            if session == "fail-http":
+                body = {"ok": False, "error": "daemon says no"}
+                encoded = json.dumps(body, ensure_ascii=False).encode("utf-8")
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+                return
+            elif session == "base64-shot":
                 body = {
                     "ok": True,
                     "data": {
@@ -370,6 +379,19 @@ class MockDaemonCliTests(unittest.TestCase):
 
         self.assertEqual(Path(result.stdout.strip()), output_path.resolve())
         self.assertEqual(output_path.read_bytes(), b"fake-image-bytes")
+
+    def test_screenshot_ps1_preserves_http_error_body(self):
+        result = self.run_pwsh_cli(
+            "-File",
+            str(SCRIPTS / "screenshot.ps1"),
+            "-DaemonUrl",
+            self.daemon_url,
+            "-Session",
+            "fail-http",
+            expected=1,
+        )
+
+        self.assertIn("daemon says no", result.stderr)
 
 
 if __name__ == "__main__":
