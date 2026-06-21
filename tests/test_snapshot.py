@@ -12,6 +12,36 @@ from snapshot import auto_snapshot, compact_snapshot, parse_args  # noqa: E402
 
 
 class CompactSnapshotTests(unittest.TestCase):
+    def test_compact_snapshot_does_not_enqueue_large_flat_lists(self):
+        class CountingList(list):
+            def __init__(self, *args):
+                super().__init__(*args)
+                self.iterated = 0
+                self.reversed = 0
+
+            def __iter__(self):
+                for item in super().__iter__():
+                    self.iterated += 1
+                    yield item
+
+            def __reversed__(self):
+                for item in super().__reversed__():
+                    self.reversed += 1
+                    yield item
+
+        children = CountingList(
+            {"role": "link", "name": f"Item {index}", "ref": f"@e{index}"}
+            for index in range(1000)
+        )
+        response = {"ok": True, "data": {"tree": children}}
+
+        result = compact_snapshot(response, max_elements=1, max_name_length=240)
+
+        self.assertEqual(len(result["elements"]), 1)
+        self.assertTrue(result["truncated"])
+        self.assertEqual(children.iterated, 1)
+        self.assertEqual(children.reversed, 0)
+
     def test_nested_lists_are_flattened(self):
         response = {
             "ok": True,

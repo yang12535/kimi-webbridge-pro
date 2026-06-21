@@ -63,11 +63,15 @@ def compact_snapshot(response, max_elements, max_name_length):
     elements = []
 
     # Keep semantic landmarks and actionable refs; omit most static text.
-    stack = [data.get("tree")]
+    stack = [iter([data.get("tree")])]
     while stack and len(elements) < max_elements:
-        nodes = stack.pop()
+        try:
+            nodes = next(stack[-1])
+        except StopIteration:
+            stack.pop()
+            continue
         if isinstance(nodes, list):
-            stack.extend(reversed(nodes))
+            stack.append(iter(nodes))
             continue
         if not isinstance(nodes, dict):
             continue
@@ -90,7 +94,7 @@ def compact_snapshot(response, max_elements, max_name_length):
             elements.append(item)
         children = nodes.get("children")
         if children is not None:
-            stack.append(children)
+            stack.append(iter(children if isinstance(children, list) else [children]))
     return {
         "ok": response.get("ok"),
         "url": data.get("url"),
