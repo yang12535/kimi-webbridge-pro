@@ -36,12 +36,59 @@ if ($Session) {
 }
 
 $json = $body | ConvertTo-Json -Depth 20 -Compress
-$response = Invoke-RestMethod `
-    -Method Post `
-    -Uri "$DaemonUrl/command" `
-    -ContentType "application/json; charset=utf-8" `
-    -Body ([System.Text.Encoding]::UTF8.GetBytes($json)) `
-    -TimeoutSec $TimeoutSec
+function Get-WebBridgeErrorMessage {
+    param(
+        [System.Management.Automation.ErrorRecord] $ErrorRecord,
+        [string] $Fallback
+    )
+
+    if ($ErrorRecord.ErrorDetails -and -not [string]::IsNullOrWhiteSpace($ErrorRecord.ErrorDetails.Message)) {
+        return $ErrorRecord.ErrorDetails.Message
+    }
+
+    $response = $ErrorRecord.Exception.Response
+    if ($response -and $response.Content) {
+        try {
+            $body = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+            if (-not [string]::IsNullOrWhiteSpace($body)) {
+                return $body
+            }
+        }
+        catch {
+            # Fall back to the Windows PowerShell response stream path below.
+        }
+    }
+
+    if ($response -and $response.GetResponseStream) {
+        $stream = $response.GetResponseStream()
+        if ($stream) {
+            $reader = New-Object System.IO.StreamReader($stream)
+            try {
+                $body = $reader.ReadToEnd()
+            }
+            finally {
+                $reader.Dispose()
+            }
+            if (-not [string]::IsNullOrWhiteSpace($body)) {
+                return $body
+            }
+        }
+    }
+
+    return "$Fallback $($ErrorRecord.Exception.Message)"
+}
+
+try {
+    $response = Invoke-RestMethod `
+        -Method Post `
+        -Uri "$DaemonUrl/command" `
+        -ContentType "application/json; charset=utf-8" `
+        -Body ([System.Text.Encoding]::UTF8.GetBytes($json)) `
+        -TimeoutSec $TimeoutSec
+}
+catch {
+    throw (Get-WebBridgeErrorMessage $_ "Kimi WebBridge screenshot request failed:")
+}
 
 if ($null -ne $response.ok -and -not $response.ok) {
     $message = if ($response.error) { $response.error } else { "Kimi WebBridge screenshot failed." }

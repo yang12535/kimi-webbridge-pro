@@ -1,5 +1,25 @@
 # Changed
 
+## Unreleased
+
+### Fixed
+
+- Aligned `doctor.py` readiness `reason` and recommendations when the daemon reports running but its port is unreachable.
+- Clamped `doctor.py` and `wait_for.py` polling sleeps to the remaining timeout when `--interval` exceeds `--timeout`, and stopped `wait_for.py` from sending a final snapshot request after the deadline.
+- Replaced recursive accessibility-tree walking in `snapshot.py` and `wait_for.py` with iterative traversal to avoid `RecursionError` on deeply nested pages.
+- Avoided enqueueing large flat sibling lists in `snapshot.py` compact traversal before the element cap can stop collection.
+- Made `invoke.sh` reject simultaneous `--args-json` and `--args-file`, matching the PowerShell helper.
+- Preserved daemon error bodies from non-2xx `Invoke-RestMethod` failures in PowerShell helpers across Windows PowerShell and PowerShell 7 response shapes.
+
+### Changed
+
+- Added the GitHub source and issue tracker link to README, the skill entrypoint, and operations troubleshooting docs.
+
+### Validation
+
+- Added cross-platform mock-daemon CLI tests for `invoke.sh`, `snapshot.py`, `wait_for.py`, `screenshot.py`, `invoke.ps1`, and `screenshot.ps1`.
+- Fixed the mock-daemon test harness on Windows by invoking `invoke.sh` through `bash` and decoding subprocess output as UTF-8.
+
 ## v1.0.0 - 2026-06-20
 
 First formal release of Kimi WebBridge Pro as an agent-neutral browser-control skill.
@@ -33,4 +53,3 @@ First formal release of Kimi WebBridge Pro as an agent-neutral browser-control s
 
 - Daemon-side automatic tab switching after clicks remains outside this skill repository.
 - Stitched full-page screenshots are deferred until there is a stable screenshot/scroll contract and an explicit image dependency decision.
-

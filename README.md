@@ -5,6 +5,7 @@
 **面向本地 AI Agent 的真实浏览器控制 skill，强调隐私最小化和标签页安全**
 
 [![Agent Skill](https://img.shields.io/badge/Agent-Skill-black.svg)](skill/SKILL.md)
+[![GitHub](https://img.shields.io/badge/GitHub-yang12535%2Fkimi--webbridge--pro-181717.svg)](https://github.com/yang12535/kimi-webbridge-pro)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue.svg)](#快速开始)
 [![Privacy](https://img.shields.io/badge/Privacy-Minimized-green.svg)](#隐私与安全)
 
@@ -32,6 +33,8 @@ Kimi WebBridge Pro 是一个独立的 Agent skill，通过本机 Kimi WebBridge 
 扩展，并在官方 skill 的基础上补充跨 Agent 工作流约束。
 
 > 本项目是社区维护的非官方项目，与 Moonshot AI、Kimi 或 OpenAI 无隶属或背书关系。
+>
+> 项目源码与问题反馈：https://github.com/yang12535/kimi-webbridge-pro
 
 ## 主要增强
 
