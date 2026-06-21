@@ -6,6 +6,7 @@ description: "Control the user's real logged-in browser through the local Kimi W
 # Kimi WebBridge Pro
 
 Control the user's live browser through the daemon at `http://127.0.0.1:10086`.
+Project source and issue tracker: https://github.com/yang12535/kimi-webbridge-pro
 
 ## Before every task
 

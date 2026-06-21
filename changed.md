@@ -10,6 +10,10 @@
 - Made `invoke.sh` reject simultaneous `--args-json` and `--args-file`, matching the PowerShell helper.
 - Preserved daemon error bodies from non-2xx `Invoke-RestMethod` failures in PowerShell helpers across Windows PowerShell and PowerShell 7 response shapes.
 
+### Changed
+
+- Added the GitHub source and issue tracker link to README, the skill entrypoint, and operations troubleshooting docs.
+
 ### Validation
 
 - Added cross-platform mock-daemon CLI tests for `invoke.sh`, `snapshot.py`, `wait_for.py`, `screenshot.py`, `invoke.ps1`, and `screenshot.ps1`.

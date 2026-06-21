@@ -63,6 +63,7 @@ Interpret the doctor report as follows:
 
 Prerequisite links:
 
+- Kimi WebBridge Pro source and issue tracker: `https://github.com/yang12535/kimi-webbridge-pro`
 - Kimi WebBridge documentation and daemon setup: `https://www.kimi.com/zh-cn/features/webbridge`
 - Chrome Web Store extension: `https://chromewebstore.google.com/detail/kimi-webbridge/fldmhceldgbpfpkbgopacenieobmligc?pli=1`
 
