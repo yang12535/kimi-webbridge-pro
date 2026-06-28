@@ -21,7 +21,8 @@ Options:
   -a, --action ACTION      WebBridge action name
   -s, --session SESSION    Stable task session name
   -j, --args-json JSON     Action arguments as JSON
-  -f, --args-file PATH     UTF-8 JSON file containing action arguments
+  -f, --args-file PATH     UTF-8 JSON file containing action arguments; use - for stdin
+      --args-stdin         Read UTF-8 JSON action arguments from stdin
   -o, --output PATH        Save the raw response instead of printing it
   -d, --daemon-url URL     Daemon URL (default: http://127.0.0.1:10086)
   -t, --timeout SECONDS    Request timeout (default: 30)
@@ -29,7 +30,7 @@ Options:
       --force              Allow destructive helper actions such as close_session
   -h, --help               Show this help
 
-Use --args-file for non-ASCII text or complex JSON.
+Use --args-file - or --args-stdin for non-ASCII text or complex JSON without a temporary file.
 EOF
 }
 
@@ -51,6 +52,10 @@ while (($#)); do
     -f|--args-file)
       args_file="${2:?missing file path}"
       shift 2
+      ;;
+    --args-stdin)
+      args_file="-"
+      shift
       ;;
     -o|--output)
       output_path="${2:?missing output path}"
@@ -105,9 +110,19 @@ if [[ -n "$args_file" && "$args_json_set" == true ]]; then
 fi
 
 if [[ -n "$args_file" ]]; then
-  [[ -f "$args_file" ]] || { echo "Arguments file not found: $args_file" >&2; exit 2; }
-  args_json="$(<"$args_file")"
+  if [[ "$args_file" == "-" ]]; then
+    if [[ -t 0 ]]; then
+      echo "Refusing to wait for JSON on an interactive terminal; pipe input or use a heredoc." >&2
+      exit 2
+    fi
+    args_json="$(cat)"
+  else
+    [[ -f "$args_file" ]] || { echo "Arguments file not found: $args_file" >&2; exit 2; }
+    args_json="$(<"$args_file")"
+  fi
 fi
+
+[[ "$args_json" =~ [^[:space:]] ]] || { echo "Arguments JSON is empty." >&2; exit 2; }
 
 request_file="$(mktemp)"
 trap 'rm -f "$request_file"' EXIT

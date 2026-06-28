@@ -41,8 +41,8 @@ Kimi WebBridge Pro 是一个独立的 Agent skill，通过本机 Kimi WebBridge 
 | 能力 | 说明 |
 |---|---|
 | Windows 原生 helper | 使用 PowerShell 对象构造 UTF-8 JSON，避免命令行转义问题 |
-| UTF-8 参数文件 | PowerShell 和 Bash 均支持从 JSON 文件读取中文、特殊字符和嵌套参数 |
-| Bash 调用 helper | 无 `jq` 依赖，支持从 UTF-8 JSON 文件读取中文和复杂参数 |
+| UTF-8 复杂参数 | PowerShell 支持 JSON 文件；Bash 还可从 stdin 直接读取中文、emoji 和嵌套参数 |
+| Bash 调用 helper | 无 `jq` 依赖，支持从 UTF-8 文件或 stdin 读取中文和复杂参数 |
 | Snapshot 控制 | 支持自动策略、精简 UI 摘要，或把完整快照写入临时文件 |
 | Doctor 自检 | 检查 daemon binary、status、端口、PID 文件和扩展连接，可短轮询等待连接，并输出 JSON reason |
 | 跨平台截图 | Python helper 兼容 daemon 路径响应和旧版 base64 响应 |
@@ -327,6 +327,10 @@ py -3 -m unittest discover -s tests -v
 - 合成点击和输入无法满足要求 `event.isTrusted` 的网站
 - 顶层页面操作不能直接访问跨域 iframe 内容
 - 浏览器可能拦截站点尝试打开的弹窗或新标签页
+- `find_tab` 选择的是 WebBridge session 内的目标，不保证切换浏览器可见焦点；独立标签页应使用独立 session
+- `find_tab active:true` 不能配合 `https://*/*` 可靠发现未知的当前标签页；应提供已知 URL/域名并核对快照
+- `fill` 对 `contenteditable` 仍是纯文本替换，不提供粗体、斜体或范围级富文本语义
+- `mouse_click`、`key_type`、`send_keys` 和通用 `cdp` 取决于 daemon/扩展版本，其中 `cdp` 属于高权限高级能力
 - daemon 和扩展升级后，响应协议可能发生变化，需要重新实测
 
 ## 贡献
