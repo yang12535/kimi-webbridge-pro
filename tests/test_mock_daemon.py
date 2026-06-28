@@ -204,6 +204,19 @@ class MockDaemonCliTests(unittest.TestCase):
 
         self.assertIn("Use either --args-json or --args-file, not both.", result.stderr)
 
+    def test_invoke_sh_rejects_empty_inline_json(self):
+        result = self.run_bash_cli(
+            SCRIPTS / "invoke.sh",
+            "--action",
+            "snapshot",
+            "--args-json",
+            "   ",
+            "--dry-run",
+            expected=2,
+        )
+
+        self.assertIn("Arguments JSON is empty.", result.stderr)
+
     def test_invoke_sh_reads_utf8_json_from_stdin(self):
         args_json = json.dumps(
             {

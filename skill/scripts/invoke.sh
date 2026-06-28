@@ -111,13 +111,18 @@ fi
 
 if [[ -n "$args_file" ]]; then
   if [[ "$args_file" == "-" ]]; then
+    if [[ -t 0 ]]; then
+      echo "Refusing to wait for JSON on an interactive terminal; pipe input or use a heredoc." >&2
+      exit 2
+    fi
     args_json="$(cat)"
   else
     [[ -f "$args_file" ]] || { echo "Arguments file not found: $args_file" >&2; exit 2; }
     args_json="$(<"$args_file")"
   fi
-  [[ -n "$args_json" ]] || { echo "Arguments JSON is empty." >&2; exit 2; }
 fi
+
+[[ "$args_json" =~ [^[:space:]] ]] || { echo "Arguments JSON is empty." >&2; exit 2; }
 
 request_file="$(mktemp)"
 trap 'rm -f "$request_file"' EXIT

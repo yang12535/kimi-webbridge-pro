@@ -12,6 +12,7 @@
 - Made PowerShell and Bash example boundaries explicit, including Git Bash on Windows.
 - Clarified that factual search may accompany a browser-state task even though a standalone lookup should not trigger WebBridge.
 - Added `invoke.sh --args-stdin` and `--args-file -` so Bash callers can send UTF-8 emoji or nested JSON without temporary files.
+- Made `invoke.sh` reject interactive stdin waits and empty inline JSON payloads before building a request.
 - Aligned `doctor.py` readiness `reason` and recommendations when the daemon reports running but its port is unreachable.
 - Clamped `doctor.py` and `wait_for.py` polling sleeps to the remaining timeout when `--interval` exceeds `--timeout`, and stopped `wait_for.py` from sending a final snapshot request after the deadline.
 - Replaced recursive accessibility-tree walking in `snapshot.py` and `wait_for.py` with iterative traversal to avoid `RecursionError` on deeply nested pages.
@@ -26,6 +27,7 @@
 ### Validation
 
 - Added a mock-daemon regression test for UTF-8 emoji and nested JSON streamed to `invoke.sh` over stdin.
+- Added regression coverage for empty `--args-json` input.
 - Added cross-platform mock-daemon CLI tests for `invoke.sh`, `snapshot.py`, `wait_for.py`, `screenshot.py`, `invoke.ps1`, and `screenshot.ps1`.
 - Fixed the mock-daemon test harness on Windows by invoking `invoke.sh` through `bash` and decoding subprocess output as UTF-8.
 
