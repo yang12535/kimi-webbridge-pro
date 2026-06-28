@@ -39,14 +39,15 @@ For PowerShell, use a UTF-8 JSON file when arguments contain non-ASCII text, nes
 Remove-Item -LiteralPath .\webbridge-args.json
 ```
 
-For Bash, use a UTF-8 JSON file when arguments contain non-ASCII text or complex quoting:
+For Bash, stream UTF-8 JSON on stdin when arguments contain non-ASCII text or complex quoting:
 
 ```bash
-printf '%s' '{"selector":"@e10","value":"显卡日报"}' > /tmp/webbridge-args.json
-scripts/invoke.sh --session demo --action fill \
-  --args-file /tmp/webbridge-args.json
-rm -f /tmp/webbridge-args.json
+scripts/invoke.sh --session demo --action fill --args-stdin <<'JSON'
+{"selector":"@e10","value":"显卡日报 🌔"}
+JSON
 ```
+
+Use `--args-file PATH` for an existing payload, or `--args-file -` as an alias for stdin.
 
 Both invoke helpers support a no-request payload check:
 
@@ -135,7 +136,7 @@ python3 scripts/wait_for.py --session demo \
 | `list_tabs` | none | Inspect tabs associated with the session. |
 | `snapshot` | none | Read URL, title, accessibility tree, and `@e` refs. |
 | `click` | `selector` | Click an `@e` ref or CSS selector. |
-| `fill` | `selector`, `value` | Replace text in inputs, textareas, or contenteditable editors. |
+| `fill` | `selector`, `value` | Replace plain text in inputs, textareas, or contenteditable editors; rich-text markup is not preserved. |
 | `evaluate` | `code` | Read attributes or perform unsupported page logic. |
 | `screenshot` | `format`, optional `quality`, optional `selector` | Capture the page or one element. Current daemons return a file path; older builds may return base64. Use the helper script. |
 | `network` | `cmd`, optional `filter`, optional `requestId` | Start, stop, list, or inspect captured network traffic. |
@@ -206,9 +207,15 @@ python3 scripts/wait_for.py --session demo \
 ## Tab and popup behavior
 
 - `find_tab active:true` prefers the currently active matching browser tab; it does not mean "activate this result."
+- When the URL is unknown, `find_tab` with `{"url":"https://*/*","active":true}` can discover the active ordinary HTTPS tab. Take a snapshot and verify URL/title before acting; retry `http://*/*` only for an expected HTTP page.
+- Keep independent tabs in independent sessions. Do not rely on repeated `find_tab` calls in one multi-tab session to switch subsequent actions reliably.
 - A click may open a background tab without changing the visible page.
 - **If `list_tabs` shows no destination tab, the browser may have blocked the popup or new window. Ask the user to allow it for the site before retrying.**
 - If no tab appears and the clicked element is a link, use `evaluate` to read its real `href`, then call `navigate` directly.
+
+## Rich-text editors
+
+`fill` is a plain-text clear-and-replace action even when the target is `contenteditable`. It does not provide bold, italic, or range-preserving rich-text semantics. Prefer accessible editor toolbar controls. If they are unavailable, use only a bounded page-specific `evaluate` that preserves the intended DOM range and verify the result visually. Broad `document.execCommand` calls can format the whole editor and should not be presented as a reliable generic solution.
 
 ## Closing sessions safely
 

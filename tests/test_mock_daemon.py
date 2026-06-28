@@ -106,7 +106,7 @@ class MockDaemonCliTests(unittest.TestCase):
         cls.server.server_close()
         cls.tempdir.cleanup()
 
-    def run_cli(self, command, *args, expected=0, timeout=5):
+    def run_cli(self, command, *args, expected=0, timeout=5, input_text=None):
         env = os.environ.copy()
         env.setdefault("PYTHONIOENCODING", "utf-8")
         result = subprocess.run(
@@ -118,6 +118,7 @@ class MockDaemonCliTests(unittest.TestCase):
             errors="replace",
             env=env,
             timeout=timeout,
+            input=input_text,
         )
         self.assertEqual(result.returncode, expected, result.stderr or result.stdout)
         return result
@@ -150,13 +151,14 @@ class MockDaemonCliTests(unittest.TestCase):
             self.skipTest("pwsh is not available")
         return executable
 
-    def run_bash_cli(self, script, *args, expected=0, timeout=5):
+    def run_bash_cli(self, script, *args, expected=0, timeout=5, input_text=None):
         return self.run_cli(
             self.bash_executable(),
             str(script),
             *args,
             expected=expected,
             timeout=timeout,
+            input_text=input_text,
         )
 
     def run_pwsh_cli(self, *args, expected=0, timeout=5):
@@ -201,6 +203,46 @@ class MockDaemonCliTests(unittest.TestCase):
             )
 
         self.assertIn("Use either --args-json or --args-file, not both.", result.stderr)
+
+    def test_invoke_sh_reads_utf8_json_from_stdin(self):
+        args_json = json.dumps(
+            {
+                "selector": "@e1",
+                "value": "🌔🥚🏋️‍♂️",
+                "nested": {"enabled": True},
+            },
+            ensure_ascii=False,
+        )
+        result = self.run_bash_cli(
+            SCRIPTS / "invoke.sh",
+            "--daemon-url",
+            self.daemon_url,
+            "--action",
+            "fill",
+            "--session",
+            "mock",
+            "--args-stdin",
+            input_text=args_json,
+        )
+
+        response = json.loads(result.stdout)
+        echo = response["data"]["echo"]
+        self.assertEqual(echo["args"]["value"], "🌔🥚🏋️‍♂️")
+        self.assertEqual(echo["args"]["nested"], {"enabled": True})
+
+    def test_invoke_sh_accepts_dash_as_stdin_args_file(self):
+        result = self.run_bash_cli(
+            SCRIPTS / "invoke.sh",
+            "--action",
+            "fill",
+            "--args-file",
+            "-",
+            "--dry-run",
+            input_text='{"selector":"@e1","value":"🌔"}',
+        )
+
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["args"]["value"], "🌔")
 
     def test_invoke_ps1_args_file_posts_utf8_json_to_mock_daemon(self):
         with tempfile.NamedTemporaryFile(
