@@ -129,6 +129,8 @@ python3 scripts/wait_for.py --session demo \
 
 ## Actions
 
+Action availability depends on the installed daemon and extension versions. The core actions below are broadly available. Extension 1.10.1 also exposes the version-dependent CDP input actions listed here; treat `Unknown tool` as an unavailable capability and follow [operations.md](operations.md).
+
 | Action | Arguments | Purpose |
 |---|---|---|
 | `navigate` | `url`, `newTab`, optional `group_title` | Navigate the selected tab or create a task-owned tab. |
@@ -137,6 +139,10 @@ python3 scripts/wait_for.py --session demo \
 | `snapshot` | none | Read URL, title, accessibility tree, and `@e` refs. |
 | `click` | `selector` | Click an `@e` ref or CSS selector. |
 | `fill` | `selector`, `value` | Replace plain text in inputs, textareas, or contenteditable editors; rich-text markup is not preserved. |
+| `mouse_click` | `selector` | Use CDP mouse events on an `@e` ref or CSS selector; version-dependent. |
+| `key_type` | `text` | Insert arbitrary Unicode text into the currently focused control; version-dependent. |
+| `send_keys` | `keys`, optional `repeat` | Send named keys and modifier shortcuts; version-dependent. |
+| `cdp` | `method`, optional `params` | Send an advanced CDP command to the selected tab; version-dependent and high privilege. |
 | `evaluate` | `code` | Read attributes or perform unsupported page logic. |
 | `screenshot` | `format`, optional `quality`, optional `selector` | Capture the page or one element. Current daemons return a file path; older builds may return base64. Use the helper script. |
 | `network` | `cmd`, optional `filter`, optional `requestId` | Start, stop, list, or inspect captured network traffic. |
@@ -165,6 +171,7 @@ python3 scripts/wait_for.py --session demo \
 - Snapshot refs such as `@e10` are WebBridge references, not DOM attributes. They work with `click` and `fill`, but selectors such as `[data-ref="@e10"]` usually do not exist.
 - Refresh the snapshot after navigation or major DOM changes.
 - Treat `click` and `fill` as synthetic DOM events. Sites requiring `event.isTrusted` may reject them.
+- Prefer `mouse_click` over DOM-level `click` only when the normal action is rejected and the selected element has a visible layout box.
 - Treat `fill` as clear-and-replace. Read and concatenate the existing value before filling when appending.
 - Wrap repeated `evaluate` code in an IIFE to avoid top-level `const` or `let` redeclaration:
 
@@ -185,7 +192,7 @@ python3 scripts/wait_for.py --session demo \
 })()
 ```
 
-- Click a submit button directly when possible. Use `evaluate` for special key events because there is no dedicated keypress action.
+- Click a submit button directly when possible. Use version-dependent `send_keys` for keyboard shortcuts and named keys; use `key_type` for arbitrary Unicode text after explicitly focusing the intended control.
 - Top-frame actions cannot access cross-origin iframe contents. Navigate to the iframe URL directly when appropriate.
 - For long pages, scroll in bounded steps and take a fresh snapshot afterward:
 
@@ -207,7 +214,9 @@ python3 scripts/wait_for.py --session demo \
 ## Tab and popup behavior
 
 - `find_tab active:true` prefers the currently active matching browser tab; it does not mean "activate this result."
-- When the URL is unknown, `find_tab` with `{"url":"https://*/*","active":true}` can discover the active ordinary HTTPS tab. Take a snapshot and verify URL/title before acting; retry `http://*/*` only for an expected HTTP page.
+- `find_tab` requires `url`. Do not use `https://*/*` or another broad wildcard to discover an unknown current tab: affected extension versions may fall back to the first matching tab instead of the active tab.
+- Use a known, narrow URL pattern and verify URL/title. If the current URL or hostname is unknown, ask for it or use a dedicated current-tab API supplied by the host agent.
+- When `cdp` is available, `{"method":"Page.bringToFront","params":{}}` can request visible activation after `find_tab`; verify the resulting snapshot and do not claim activation if the action is unavailable or fails.
 - Keep independent tabs in independent sessions. Do not rely on repeated `find_tab` calls in one multi-tab session to switch subsequent actions reliably.
 - A click may open a background tab without changing the visible page.
 - **If `list_tabs` shows no destination tab, the browser may have blocked the popup or new window. Ask the user to allow it for the site before retrying.**
@@ -215,7 +224,14 @@ python3 scripts/wait_for.py --session demo \
 
 ## Rich-text editors
 
-`fill` is a plain-text clear-and-replace action even when the target is `contenteditable`. It does not provide bold, italic, or range-preserving rich-text semantics. Prefer accessible editor toolbar controls. If they are unavailable, use only a bounded page-specific `evaluate` that preserves the intended DOM range and verify the result visually. Broad `document.execCommand` calls can format the whole editor and should not be presented as a reliable generic solution.
+`fill` is a plain-text clear-and-replace action even when the target is `contenteditable`. It does not provide bold, italic, or range-preserving rich-text semantics. Prefer accessible editor toolbar controls. When `send_keys` is available, a page-specific fallback may create the exact selection with bounded `evaluate`, verify the selected text, then send an editor shortcut such as `Mod+B`. Verify the result with a screenshot. Broad `document.execCommand` calls can format the whole editor and should not be presented as a reliable generic solution.
+
+## Keyboard and raw CDP boundaries
+
+- `key_type` inserts text into whichever control is focused. Focus and verify the target immediately before calling it.
+- `send_keys` accepts whitespace-separated keys or shortcuts such as `Enter`, `Shift+Tab`, `Mod+A`, and `Mod+B`; `Mod` resolves to Command on macOS and Control elsewhere. Supported named keys and shortcut syntax vary by extension version.
+- Use `cdp` only for a narrowly identified method when no safer action suffices. `Page.bringToFront` is an acceptable tab-activation request; bounded input or page-state checks may also be appropriate.
+- Never use `cdp` to read cookies, authorization data, browser storage, unrelated network bodies, or other private state. Do not send arbitrary caller-supplied CDP methods without reviewing them.
 
 ## Closing sessions safely
 

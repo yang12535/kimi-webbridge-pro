@@ -328,7 +328,9 @@ py -3 -m unittest discover -s tests -v
 - 顶层页面操作不能直接访问跨域 iframe 内容
 - 浏览器可能拦截站点尝试打开的弹窗或新标签页
 - `find_tab` 选择的是 WebBridge session 内的目标，不保证切换浏览器可见焦点；独立标签页应使用独立 session
+- `find_tab active:true` 不能配合 `https://*/*` 可靠发现未知的当前标签页；应提供已知 URL/域名并核对快照
 - `fill` 对 `contenteditable` 仍是纯文本替换，不提供粗体、斜体或范围级富文本语义
+- `mouse_click`、`key_type`、`send_keys` 和通用 `cdp` 取决于 daemon/扩展版本，其中 `cdp` 属于高权限高级能力
 - daemon 和扩展升级后，响应协议可能发生变化，需要重新实测
 
 ## 贡献

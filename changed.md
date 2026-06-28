@@ -4,9 +4,11 @@
 
 ### Fixed
 
-- Added a documented and guarded current-tab discovery recipe for URL-unknown user requests, including URL/title verification before acting.
+- Documented that broad wildcard `find_tab active:true` calls cannot reliably discover an unknown current tab, and require a known URL/hostname or a dedicated host-agent API instead.
+- Documented the version-dependent `mouse_click`, `key_type`, `send_keys`, and high-privilege `cdp` actions observed in extension 1.10.1.
+- Added a guarded `Page.bringToFront` activation workflow for known tabs when the installed versions expose `cdp`.
 - Avoided unreliable multi-tab focus switching by assigning independent tabs and side lookups to independent WebBridge sessions.
-- Clarified that `fill` is plain-text replacement for `contenteditable` targets and does not provide reliable rich-text formatting semantics.
+- Clarified that `fill` is plain-text replacement for `contenteditable` targets, while exact-range selection plus version-dependent `send_keys` may support verified editor shortcuts.
 - Made PowerShell and Bash example boundaries explicit, including Git Bash on Windows.
 - Clarified that factual search may accompany a browser-state task even though a standalone lookup should not trigger WebBridge.
 - Added `invoke.sh --args-stdin` and `--args-file -` so Bash callers can send UTF-8 emoji or nested JSON without temporary files.

@@ -98,6 +98,7 @@ curl -fsSL https://cdn.kimi.com/webbridge/install.sh | bash
 | Extension remains disconnected | Open the browser, install or enable the Chrome Web Store extension, and retry status. |
 | Extension is connected but actions fail | Read logs for version, multi-browser, or extension-upgrade errors. |
 | The error asks for an extension update | Update the extension from the Chrome Web Store link above; do not repeatedly retry the action. |
+| An action returns `Unknown tool` | Treat it as unavailable in the installed daemon/extension pair. Check both versions and update through official channels before retrying once; do not silently replace it with unrestricted `evaluate` or `cdp`. |
 
 `status.extension_id` may differ from the Chrome Web Store URL ID. Treat `doctor.py`'s `ready` result as the authoritative readiness signal because it includes daemon status, extension connectivity, and the `127.0.0.1:10086` port probe; use the ID only as supporting diagnostic context.
 

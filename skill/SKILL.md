@@ -26,7 +26,8 @@ Project source and issue tracker: https://github.com/yang12535/kimi-webbridge-pr
 
 ## Quick decision tree
 
-- Need the user's existing login state or current tab? Use `find_tab`, then take a snapshot and verify URL/title before acting.
+- Need the user's existing login state? Use `find_tab` with a known URL or hostname, then take a snapshot and verify URL/title before acting.
+- User says only "current tab" and gives no URL or hostname? Do not guess with a broad wildcard; ask for the URL/domain or use a dedicated current-tab API when the host agent provides one.
 - Need a side tab for a lookup or analysis? Give it a different session so it cannot displace the original tab's session selection.
 - Need an isolated tab you can close later? Use `navigate` with `newTab:true`.
 - Page size is unknown? Start with `snapshot.py --auto`.
@@ -48,11 +49,14 @@ Use this as the minimum dashboard. Read [protocol.md](references/protocol.md) fo
 | `snapshot` | Read URL, title, accessible text, and `@e` refs for the selected tab. |
 | `click` | Click a snapshot ref or selector after taking a fresh snapshot. |
 | `fill` | Replace plain text in an input, textarea, or contenteditable field; it does not preserve rich-text formatting. |
+| `mouse_click` | Send a CDP mouse click to an element when DOM-level `click` is rejected. |
+| `key_type` | Insert arbitrary Unicode text into the focused control. |
+| `send_keys` | Send named keys or shortcuts such as `Enter`, `Tab`, or `Mod+B`. |
 | `evaluate` | Read bounded page state or recover a real link when normal actions are insufficient. |
 | `screenshot` | Capture the page or an element; use the helper to handle path/base64 variants. |
 | `close_tab` | Close the selected task-owned tab after verification. |
 
-Treat `close_session`, `upload`, `save_as_pdf`, and `network` as advanced actions; load [protocol.md](references/protocol.md) before using them.
+Treat `close_session`, `upload`, `save_as_pdf`, `network`, and `cdp` as advanced actions; load [protocol.md](references/protocol.md) before using them. `mouse_click`, `key_type`, `send_keys`, and `cdp` are version-dependent; if the daemon returns `Unknown tool`, follow [operations.md](references/operations.md) instead of emulating success.
 For worked examples, read only the relevant file under [examples](examples/): form filling, long-page extraction, popup recovery, or network debugging.
 
 ## Use helpers
@@ -141,24 +145,32 @@ scripts/invoke.sh --session demo --action close_tab
 
 User-owned tab workflow: call `find_tab`, take a compact `snapshot`, perform the requested action, and do not close the tab unless the user explicitly asks.
 
-When the user says only "current tab" and does not provide its URL, discover the active ordinary web tab with a wildcard, then verify the returned URL and title before acting:
+`find_tab` requires a URL pattern and does not visibly activate the selected browser tab. Use a known, narrow URL pattern and verify the snapshot. Do not use `https://*/*` with `active:true` to discover an unknown current tab; some extension versions fall back to the first matching HTTPS tab.
+
+When visible activation is necessary and the installed version supports the advanced `cdp` action, select a known tab first and request `Page.bringToFront`:
 
 ```powershell
-& scripts\invoke.ps1 -Session "current-tab" -Action "find_tab" -ActionArgs @{
-  url = "https://*/*"
-  active = $true
+& scripts\invoke.ps1 -Session "game" -Action "find_tab" -ActionArgs @{
+  url = "https://neal.fun/password-game/*"
 }
-py -3 scripts\snapshot.py --session "current-tab" --auto
+& scripts\invoke.ps1 -Session "game" -Action "cdp" -ActionArgs @{
+  method = "Page.bringToFront"
+  params = @{}
+}
+py -3 scripts\snapshot.py --session "game" --auto
 ```
 
 ```bash
-scripts/invoke.sh --session current-tab --action find_tab --args-stdin <<'JSON'
-{"url":"https://*/*","active":true}
+scripts/invoke.sh --session game --action find_tab --args-stdin <<'JSON'
+{"url":"https://neal.fun/password-game/*"}
 JSON
-python3 scripts/snapshot.py --session current-tab --auto
+scripts/invoke.sh --session game --action cdp --args-stdin <<'JSON'
+{"method":"Page.bringToFront","params":{}}
+JSON
+python3 scripts/snapshot.py --session game --auto
 ```
 
-Retry with `http://*/*` only when the expected active page uses HTTP. A wildcard may fall back to another matching tab when the browser's active tab is an internal page, so never act until URL/title match the user's target.
+Treat `Page.bringToFront` as version-dependent and verify the resulting URL/title. If `cdp` is unavailable, keep controlling the selected session tab without claiming that the visible browser focus changed.
 
 ## Follow one task workflow
 
@@ -171,6 +183,7 @@ Retry with `http://*/*` only when the expected active page uses HTTP. A wildcard
 7. Use `list_tabs` before cleanup and prefer `close_tab` for task-owned tabs. Do not close user-owned tabs.
 
 Do not assume `find_tab` visibly focuses a browser tab. It selects a matching tab for the WebBridge session; `active:true` means prefer the browser's currently active matching tab.
+Do not use broad URL wildcards with `active:true`; active preference is reliable only for a known host in affected extension versions.
 Do not use one session to alternate between an original page and a side lookup tab. Use a second session for the side tab and keep the original session bound to the original page; this avoids relying on daemon-side focus switching.
 Treat `@e` values as WebBridge snapshot references, not DOM attributes. Do not query them with selectors such as `[data-ref="@e1"]`.
 When using `wait_for.py`, the text condition flag is `--text-contains`; `--visible-text` is accepted as an alias.
@@ -188,8 +201,8 @@ When using `wait_for.py`, the text condition flag is `--text-contains`; `--visib
 ## Handle rich-text editors honestly
 
 - Treat `fill` on `contenteditable` as plain-text replacement. It may remove or flatten existing markup and cannot express "bold these characters."
-- Prefer the editor's accessible toolbar buttons or keyboard shortcuts when they are exposed and can be verified with a fresh snapshot or screenshot.
-- Use bounded, page-specific `evaluate` only when the user requested that edit and native controls are unavailable. Preserve the smallest possible DOM range and verify the result visually; do not use broad `document.execCommand` calls that can format the entire editor.
+- Prefer the editor's accessible toolbar buttons. When `send_keys` is available, a page-specific workflow may use bounded `evaluate` to select the exact DOM range and then `send_keys` with `Mod+B` or another editor shortcut.
+- Preserve the smallest possible DOM range and verify the selected text before sending a shortcut. Take a screenshot afterward; do not use broad `document.execCommand` calls that can format the entire editor.
 - If neither native controls nor a safely bounded page-specific edit is available, report the formatting step as unsupported instead of claiming success.
 
 ## Combine browser state with factual lookup
