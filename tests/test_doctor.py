@@ -1,13 +1,16 @@
 import sys
+import io
+import time
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 SCRIPTS_DIR = Path(__file__).parents[1] / "skill" / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 import doctor  # noqa: E402
+import webbridge_client  # noqa: E402
 
 
 class DoctorTests(unittest.TestCase):
@@ -138,6 +141,176 @@ class DoctorTests(unittest.TestCase):
                 self.assertFalse(doctor.sleep_until_deadline(5.0, 10.0))
 
         sleep.assert_not_called()
+
+    def test_probe_command_reports_success(self):
+        response = {"ok": True, "data": {"success": True, "tabs": []}}
+        with patch.object(doctor, "post_command", return_value=response) as post:
+            probe = doctor.probe_command("127.0.0.1", 10086, 5)
+
+        self.assertEqual(probe, {"ok": True, "tab_count": 0})
+        post.assert_called_once_with(
+            "list_tabs", {}, "doctor-probe", "http://127.0.0.1:10086", 5
+        )
+
+    def test_probe_command_reports_failure(self):
+        with patch.object(doctor, "post_command", side_effect=RuntimeError("boom")):
+            probe = doctor.probe_command("127.0.0.1", 10086, 5)
+
+        self.assertFalse(probe["ok"])
+        self.assertIn("boom", probe["error"])
+
+    def test_probe_command_rejects_incomplete_success_responses(self):
+        responses = [
+            {},
+            {"ok": True},
+            {"ok": True, "data": None},
+            {"ok": True, "data": {}},
+            {"ok": True, "data": {"success": True}},
+        ]
+        for response in responses:
+            with self.subTest(response=response):
+                with patch.object(doctor, "post_command", return_value=response):
+                    probe = doctor.probe_command("127.0.0.1", 10086, 5)
+                self.assertFalse(probe["ok"])
+
+    def test_probe_command_enforces_wall_clock_timeout(self):
+        def slow_command(*_args, **_kwargs):
+            time.sleep(0.1)
+            return {"ok": True, "data": {"success": True, "tabs": []}}
+
+        started = time.monotonic()
+        with patch.object(doctor, "post_command", side_effect=slow_command):
+            probe = doctor.probe_command("127.0.0.1", 10086, 0.01)
+        elapsed = time.monotonic() - started
+
+        self.assertFalse(probe["ok"])
+        self.assertIn("wall-clock timeout", probe["error"])
+        self.assertLess(elapsed, 0.08)
+
+    def test_probe_timeout_rejects_non_finite_values(self):
+        for value in ("nan", "inf", "-inf", "0", "301"):
+            with self.subTest(value=value):
+                with patch.object(sys, "argv", ["doctor.py", "--probe-timeout", value]):
+                    with self.assertRaises(SystemExit):
+                        doctor.parse_args()
+
+    def test_failed_probe_marks_report_not_ready(self):
+        report = {
+            "binary": {"exists": True},
+            "status": {"running": True, "extension_connected": True},
+            "pid_file": {"exists": False},
+            "port_open": True,
+            "probe": {"ok": False, "error": "timed out"},
+        }
+
+        self.assertFalse(doctor.report_ready(report))
+        self.assertEqual(
+            doctor.readiness_reason(report),
+            "extension connected but command probe failed",
+        )
+
+        recommendations = doctor.build_recommendations(report)
+        self.assertTrue(any("restart" in item.lower() for item in recommendations))
+        self.assertFalse(any(item.startswith("Ready:") for item in recommendations))
+
+    def test_successful_probe_keeps_ready(self):
+        report = {
+            "binary": {"exists": True},
+            "status": {"running": True, "extension_connected": True},
+            "pid_file": {"exists": False},
+            "port_open": True,
+            "probe": {"ok": True},
+        }
+
+        self.assertTrue(doctor.report_ready(report))
+        self.assertEqual(doctor.readiness_reason(report), "ready")
+
+        recommendations = doctor.build_recommendations(report)
+        self.assertTrue(any(item.startswith("Ready:") for item in recommendations))
+
+    def test_probe_command_reports_command_level_failure(self):
+        response = {"ok": True, "data": {"success": False, "error": "no tab selected"}}
+        with patch.object(doctor, "post_command", return_value=response):
+            probe = doctor.probe_command("127.0.0.1", 10086, 5)
+
+        self.assertFalse(probe["ok"])
+        self.assertIn("no tab selected", probe["error"])
+
+    def test_skipped_probe_does_not_affect_readiness(self):
+        report = {
+            "binary": {"exists": True},
+            "status": {"running": True, "extension_connected": True},
+            "pid_file": {"exists": False},
+            "port_open": True,
+            "probe": {"skipped": True, "reason": "passive checks not ready"},
+        }
+
+        self.assertFalse(doctor.probe_failed(report))
+        self.assertTrue(doctor.report_ready(report))
+        self.assertEqual(doctor.readiness_reason(report), "ready")
+
+    def test_post_command_normalizes_timeout_to_runtime_error(self):
+        with patch.object(
+            webbridge_client.urllib.request, "urlopen", side_effect=TimeoutError("timed out")
+        ):
+            with self.assertRaises(RuntimeError) as context:
+                webbridge_client.post_command(
+                    "list_tabs", {}, "doctor-probe", "http://127.0.0.1:10086", 5
+                )
+
+        self.assertIn("timed out", str(context.exception))
+
+    def test_post_command_normalizes_malformed_json_to_runtime_error(self):
+        response = MagicMock()
+        response.__enter__.return_value = io.BytesIO(b"<html>not json</html>")
+        with patch.object(webbridge_client.urllib.request, "urlopen", return_value=response):
+            with self.assertRaises(RuntimeError) as context:
+                webbridge_client.post_command(
+                    "list_tabs", {}, "doctor-probe", "http://127.0.0.1:10086", 5
+                )
+
+        self.assertIn("malformed response", str(context.exception))
+
+    def test_post_command_rejects_non_object_json(self):
+        for payload in (b"null", b"[]", b'"ok"'):
+            with self.subTest(payload=payload):
+                response = MagicMock()
+                response.__enter__.return_value = io.BytesIO(payload)
+                with patch.object(
+                    webbridge_client.urllib.request, "urlopen", return_value=response
+                ):
+                    with self.assertRaises(RuntimeError) as context:
+                        webbridge_client.post_command(
+                            "list_tabs", {}, "doctor-probe", "http://127.0.0.1:10086", 5
+                        )
+
+                self.assertIn("expected a JSON object", str(context.exception))
+
+    def test_post_command_normalizes_invalid_utf8(self):
+        response = MagicMock()
+        response.__enter__.return_value = io.BytesIO(b'{"ok": true, "bad": "\xff"}')
+        with patch.object(webbridge_client.urllib.request, "urlopen", return_value=response):
+            with self.assertRaises(RuntimeError) as context:
+                webbridge_client.post_command(
+                    "list_tabs", {}, "doctor-probe", "http://127.0.0.1:10086", 5
+                )
+
+        self.assertIn("malformed response", str(context.exception))
+
+    def test_post_command_normalizes_http_error_body_timeout(self):
+        error = webbridge_client.urllib.error.HTTPError(
+            "http://127.0.0.1:10086/command", 500, "error", {}, None
+        )
+        error.read = MagicMock(side_effect=TimeoutError("body stalled"))
+        error.close = MagicMock()
+        with patch.object(webbridge_client.urllib.request, "urlopen", side_effect=error):
+            with self.assertRaises(RuntimeError) as context:
+                webbridge_client.post_command(
+                    "list_tabs", {}, "doctor-probe", "http://127.0.0.1:10086", 5
+                )
+
+        self.assertIn("unable to read response body", str(context.exception))
+        error.close.assert_called_once_with()
 
 
 if __name__ == "__main__":
