@@ -29,7 +29,7 @@ Run:
 | Observed state | Action |
 |---|---|
 | Binary missing | If the user asked to install it, use the official installer. Otherwise confirm before running downloaded code. |
-| `running: false` | Start the daemon, or use `doctor.py --start --wait-connected 20` when starting is appropriate. |
+| `running: false` | Use `doctor.py --start --wait-connected 20` when starting is appropriate. This delegates stale-PID handling to the daemon before any manual PID-file cleanup. |
 | `running: true`, `extension_connected: false` | Wait briefly with `doctor.py --wait-connected 20`; if still disconnected, ask the user to open the browser and verify that the [Kimi WebBridge extension](https://chromewebstore.google.com/detail/kimi-webbridge/fldmhceldgbpfpkbgopacenieobmligc?pli=1) is installed and enabled. |
 | Both fields are `true` | Return to `SKILL.md` and send browser commands. |
 
@@ -59,7 +59,9 @@ Interpret the doctor report as follows:
 - `reason`: a short machine-readable readiness summary such as `ready`, `daemon not running`, `extension not connected`, or `daemon port not reachable`.
 - `ready: false` with `status.running: false`: start the daemon, or use `doctor.py --start --wait-connected 20` when starting it is appropriate.
 - `ready: false` with `status.running: true` and `status.extension_connected: false`: open Chrome, install or enable the extension, and rerun `doctor.py`.
-- `pid_file.stale: true`: remove `daemon.pid` only after verifying the recorded process is gone, then restart the daemon.
+- `pid_file.stale: true`: first use `doctor.py --start --wait-connected 20`; remove `daemon.pid` manually only if startup still fails and the recorded process is verified gone.
+- `skill_conflicts[].scope: "same_root"`: the official and Pro skills definitely coexist in one root. Prefer Pro for helper-driven workflows and decide explicitly whether the official copy is still needed.
+- `skill_conflicts[].scope: "multiple_roots"`: both names exist across known roots. Treat this as conditional because the roots may belong to different Agents; act only if the current Agent loads both.
 
 Prerequisite links:
 
@@ -74,8 +76,24 @@ irm https://cdn.kimi.com/webbridge/install.ps1 | iex
 ```
 
 ```bash
-curl -fsSL https://cdn.kimi.com/webbridge/install.sh | bash
+curl -fsSL https://cdn.kimi.com/webbridge/install.sh | bash -s -- --no-skill
 ```
+
+The current POSIX installer otherwise installs the official `kimi-webbridge` skill as well as the daemon. When installing this Pro skill separately, pass `--no-skill` to avoid an ambiguous same-root duplicate. This option does not remove an existing official skill.
+
+## Linux login autostart
+
+Current v2 daemon builds expose `start --foreground`, so Linux users can opt into a supervised systemd user service without root:
+
+```bash
+# Inspect the exact unit first; this makes no changes.
+scripts/install_linux_autostart.sh --print-unit
+
+# Install, enable, and start ~/.config/systemd/user/kimi-webbridge.service.
+scripts/install_linux_autostart.sh
+```
+
+The helper refuses older binaries that do not advertise `start --foreground`. Upgrade through the official installer before enabling the unit. Remove the service with `scripts/install_linux_autostart.sh --uninstall`. A user service starts at login (`default.target`); the upstream daemon remains responsible for cleaning its PID file on exit.
 
 ## Lifecycle commands
 
@@ -95,6 +113,9 @@ curl -fsSL https://cdn.kimi.com/webbridge/install.sh | bash
 |---|---|
 | Address already in use | Stop, then start. If it persists, identify the process listening on port `10086`. |
 | Commands time out | Read recent logs for error or panic messages, then retry once after a restart. |
+| Bash helper exits 7 | The daemon is unreachable. Run `doctor.py --start --wait-connected 20`; the helper preserves curl exit 7. |
+| Bash helper exits 28 | The request exceeded its client deadline. Run `doctor.py --probe` before retrying; the helper preserves curl exit 28. |
+| Bash helper exits 22 | The daemon returned non-2xx HTTP. The response body is preserved for diagnosis, including on curl versions older than 7.76. |
 | Extension remains disconnected | Open the browser, install or enable the Chrome Web Store extension, and retry status. |
 | Extension is connected but actions fail | Read logs for version, multi-browser, or extension-upgrade errors. |
 | Extension connected but every action fails or times out | Run `doctor.py --probe` to confirm, then restart the daemon once (`kimi-webbridge restart`) and retry. The extension WebSocket can be a zombie that `status` cannot detect. |
@@ -103,11 +124,13 @@ curl -fsSL https://cdn.kimi.com/webbridge/install.sh | bash
 
 `status.extension_id` may differ from the Chrome Web Store URL ID. Treat `doctor.py`'s `ready` result as the authoritative readiness signal because it includes daemon status, extension connectivity, and the `127.0.0.1:10086` port probe; use the ID only as supporting diagnostic context.
 
-When the daemon reports a version mismatch, prefer upgrading the extension from the Chrome Web Store over downgrading the daemon. An unknown or unparsed skill or daemon version is not proof of being outdated; check release notes before changing versions.
+When the current v2 daemon reports `version_mismatch`, use `kimi-webbridge upgrade` without a version while that extension is connected. The official command deliberately installs the daemon release matching the browser-store extension, even when that is numerically older; exact protocol alignment is the target. A pinned `upgrade vX.Y.Z` may move in either direction. An unknown or unparsed version is not proof of being outdated.
+
+When daemon and extension versions differ, doctor emits a non-blocking alignment recommendation. Version-sensitive actions such as upload should be retried only once after alignment. If telemetry DEBUG heartbeats dominate upstream daemon logs, filter for WebSocket, error, panic, and action lines while diagnosing; changing the daemon's default telemetry log level is outside this skill repository.
 
 ## Recover a stale PID
 
-Delete `daemon.pid` only after verifying that its recorded process no longer exists. Never remove it merely because a start command failed.
+First run `doctor.py --start --wait-connected 20`; current daemon builds handle a verified stale PID on their normal start path. Delete `daemon.pid` manually only if startup still fails and the recorded process no longer exists. Never remove it merely because a start command failed.
 
 ```powershell
 $pidFile = "$env:USERPROFILE\.kimi-webbridge\daemon.pid"

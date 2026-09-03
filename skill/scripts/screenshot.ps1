@@ -111,11 +111,10 @@ if ($response.data.path) {
 }
 
 if (-not $OutputPath) {
-    $outputDirectory = Join-Path $env:TEMP "kimi-webbridge-screenshots"
-    New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+    $outputDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("kimi-webbridge-screenshots-" + [System.Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $outputDirectory | Out-Null
     $extension = if ($Format -eq "jpeg") { "jpg" } else { "png" }
-    $timestamp = Get-Date -Format "yyyyMMdd_HHmmss_fff"
-    $OutputPath = Join-Path $outputDirectory "$timestamp.$extension"
+    $OutputPath = Join-Path $outputDirectory "screenshot.$extension"
 }
 
 $resolvedOutputPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)

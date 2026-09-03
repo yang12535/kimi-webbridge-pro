@@ -5,9 +5,20 @@
 ### Added
 
 - `doctor.py --probe` sends a real `list_tabs` command after the passive checks. A failed probe marks the report not ready with reason `extension connected but command probe failed` and recommends a daemon restart, catching zombie extension connections that `status` cannot detect. `--probe-timeout` is a finite wall-clock deadline (default 10s). The probe runs only when the passive checks are ready, validates the full `list_tabs` response shape, and is marked `skipped` otherwise. Transport, HTTP-body, malformed JSON, invalid UTF-8, and wrong-shape response failures are normalized so doctor still emits a JSON report.
+- Added an opt-in Linux systemd user-service installer for current daemons that expose `start --foreground`, including no-change unit preview and uninstall modes.
+- Added Linux and Windows GitHub Actions jobs for the full unit/mock-daemon suite, Python compilation, Bash syntax, and ShellCheck.
 
 ### Fixed
 
+- Made `invoke.sh` compatible with curl older than 7.76 while preserving non-2xx bodies, curl exit 7/28, and actionable doctor guidance; all JSON argument sources now receive UTF-8/BOM parsing and object-shape validation.
+- Gave `navigate` 45 seconds of helper transport headroom while retaining the 30-second default for other actions, so the upstream page-load timeout response is not lost in a client race.
+- Made condition-less `wait_for.py` print a machine-readable `condition_required` error on stdout and exit 2; documented complete conditioned examples instead of implying a generic sleep.
+- Based snapshot auto-fallback on the final compact-output byte budget (12,000 bytes), removed embedded file-mode previews, pretty-printed inline JSON, preserved the legacy raw threshold option, added chosen-path aliases/metadata/newlines, and corrected exact-limit truncation.
+- Replaced shared snapshot/screenshot temp directories with per-invocation private directories.
+- Moved the optional `ctypes` import into the Windows process check, warned non-blockingly when daemon/extension versions differ, and detected definite same-root plus conditional cross-root official/Pro skill coexistence.
+- Documented `evaluate (code)` in the quick path and helper help, including that `expression` is not the argument key.
+- Added bounded recovery guidance for controlled fields, upload `-32000`, and navigation timeouts while marking the remaining daemon/extension behavior as upstream-owned.
+- Updated installation guidance to use the official POSIX installer's `--no-skill` option when Pro will be installed separately; no existing skill is deleted automatically.
 - Documented that broad wildcard `find_tab active:true` calls cannot reliably discover an unknown current tab, and require a known URL/hostname or a dedicated host-agent API instead.
 - Documented the version-dependent `mouse_click`, `key_type`, `send_keys`, and high-privilege `cdp` actions observed in extension 1.10.1.
 - Added a guarded `Page.bringToFront` activation workflow for known tabs when the installed versions expose `cdp`.
@@ -32,6 +43,7 @@
 
 ### Validation
 
+- Expanded the suite to cover portable Bash HTTP/error behavior, connection refusal, BOM/malformed/scalar args, forced-close refusal, navigate timeout selection, systemd unit rendering, snapshot budgets/contracts/private directories, exact truncation, condition-required JSON, version warnings, and same-root skill conflicts.
 - Added a mock-daemon regression test for UTF-8 emoji and nested JSON streamed to `invoke.sh` over stdin.
 - Added regression coverage for empty `--args-json` input.
 - Added cross-platform mock-daemon CLI tests for `invoke.sh`, `snapshot.py`, `wait_for.py`, `screenshot.py`, `invoke.ps1`, and `screenshot.ps1`.

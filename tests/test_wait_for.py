@@ -1,4 +1,5 @@
 import sys
+import json
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
@@ -36,6 +37,29 @@ class WaitForArgumentTests(unittest.TestCase):
                 self.assertTrue(wait_for.sleep_until_deadline(5.0, 10.0))
 
         sleep.assert_called_once_with(2.0)
+
+    def test_missing_condition_is_machine_readable_on_stdout(self):
+        output = StringIO()
+        with patch.object(sys, "argv", ["wait_for.py"]):
+            with patch.object(wait_for, "configure_utf8_output"):
+                with redirect_stdout(output):
+                    with self.assertRaises(SystemExit) as raised:
+                        wait_for.main()
+
+        self.assertEqual(raised.exception.code, 2)
+        error = json.loads(output.getvalue())
+        self.assertEqual(error["error"]["code"], "condition_required")
+
+    def test_timeout_and_interval_must_be_finite_and_positive(self):
+        for option, value in (
+            ("--timeout", "0"),
+            ("--timeout", "nan"),
+            ("--interval", "inf"),
+        ):
+            with self.subTest(option=option, value=value):
+                with patch.object(sys, "argv", ["wait_for.py", option, value]):
+                    with self.assertRaises(SystemExit):
+                        wait_for.parse_args()
 
     def test_main_does_not_poll_after_deadline_sleep(self):
         with patch.object(

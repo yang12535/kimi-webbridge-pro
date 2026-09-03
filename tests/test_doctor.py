@@ -1,6 +1,7 @@
 import sys
 import io
 import time
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -14,6 +15,16 @@ import webbridge_client  # noqa: E402
 
 
 class DoctorTests(unittest.TestCase):
+    def test_utf8_output_disables_windows_newline_expansion(self):
+        stdout = MagicMock()
+        stderr = MagicMock()
+        with patch.object(webbridge_client.sys, "stdout", stdout):
+            with patch.object(webbridge_client.sys, "stderr", stderr):
+                webbridge_client.configure_utf8_output()
+
+        stdout.reconfigure.assert_called_once_with(encoding="utf-8", newline="\n")
+        stderr.reconfigure.assert_called_once_with(encoding="utf-8", newline="\n")
+
     def test_parse_status_output_accepts_json(self):
         status, error = doctor.parse_status_output(
             '{"running":true,"extension_connected":false}'
@@ -29,6 +40,14 @@ class DoctorTests(unittest.TestCase):
 
         self.assertIsNone(status)
         self.assertIn("invalid status JSON", error)
+
+    def test_parse_status_output_rejects_non_object_json(self):
+        for payload in ("true", '"text"', "123", "[]"):
+            with self.subTest(payload=payload):
+                status, error = doctor.parse_status_output(payload)
+
+                self.assertIsNone(status)
+                self.assertIn("invalid status shape", error)
 
     def test_run_binary_reports_os_errors(self):
         with patch.object(doctor.subprocess, "run", side_effect=PermissionError("denied")):
@@ -127,6 +146,72 @@ class DoctorTests(unittest.TestCase):
         recommendations = doctor.build_recommendations(report)
 
         self.assertTrue(any("daemon.pid" in item for item in recommendations))
+        self.assertTrue(any("--start --wait-connected 20" in item for item in recommendations))
+        self.assertTrue(any("Try doctor.py --start first" in item for item in recommendations))
+
+    def test_skill_conflict_requires_both_skills_in_same_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("kimi-webbridge", "kimi-webbridge-pro"):
+                skill = root / name
+                skill.mkdir()
+                (skill / "SKILL.md").write_text("---\n", encoding="utf-8")
+
+            conflicts = doctor.inspect_skill_conflicts([root])
+
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0]["skills_dir"], str(root))
+
+    def test_skills_in_different_roots_get_conditional_conflict_warning(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            first = parent / "first"
+            second = parent / "second"
+            (first / "kimi-webbridge").mkdir(parents=True)
+            (second / "kimi-webbridge-pro").mkdir(parents=True)
+            (first / "kimi-webbridge" / "SKILL.md").write_text("x", encoding="utf-8")
+            (second / "kimi-webbridge-pro" / "SKILL.md").write_text("x", encoding="utf-8")
+
+            conflicts = doctor.inspect_skill_conflicts([first, second])
+
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0]["scope"], "multiple_roots")
+
+    def test_version_mismatch_gets_non_blocking_alignment_recommendation(self):
+        report = {
+            "binary": {"exists": True},
+            "status": {
+                "running": True,
+                "extension_connected": True,
+                "version": "v1.11.3",
+                "extension_version": "1.9.10",
+            },
+            "pid_file": {"exists": False},
+            "port_open": True,
+        }
+
+        recommendations = doctor.build_recommendations(report)
+
+        self.assertTrue(any("versions differ" in item for item in recommendations))
+        self.assertTrue(any("kimi-webbridge upgrade" in item for item in recommendations))
+        self.assertTrue(doctor.report_ready(report))
+
+    def test_unparseable_version_is_not_labeled_outdated(self):
+        report = {
+            "binary": {"exists": True},
+            "status": {
+                "running": True,
+                "extension_connected": True,
+                "version": "unknown",
+                "extension_version": "unknown",
+            },
+            "pid_file": {"exists": False},
+            "port_open": True,
+        }
+
+        recommendations = doctor.build_recommendations(report)
+
+        self.assertFalse(any("versions differ" in item for item in recommendations))
 
     def test_sleep_until_deadline_clamps_to_remaining_time(self):
         with patch.object(doctor.time, "monotonic", return_value=3.0):
@@ -151,6 +236,29 @@ class DoctorTests(unittest.TestCase):
         post.assert_called_once_with(
             "list_tabs", {}, "doctor-probe", "http://127.0.0.1:10086", 5
         )
+
+    def test_probe_command_formats_ipv6_daemon_url(self):
+        response = {"ok": True, "data": {"success": True, "tabs": []}}
+        with patch.object(doctor, "post_command", return_value=response) as post:
+            probe = doctor.probe_command("::1", 10086, 5)
+
+        self.assertTrue(probe["ok"])
+        post.assert_called_once_with(
+            "list_tabs", {}, "doctor-probe", "http://[::1]:10086", 5
+        )
+
+    def test_port_recommendation_uses_configured_port(self):
+        report = {
+            "daemon": {"host": "127.0.0.1", "port": 12345},
+            "binary": {"exists": True},
+            "status": {"running": True, "extension_connected": True},
+            "pid_file": {"exists": False},
+            "port_open": False,
+        }
+
+        recommendations = doctor.build_recommendations(report)
+
+        self.assertTrue(any("port 12345" in item for item in recommendations))
 
     def test_probe_command_reports_failure(self):
         with patch.object(doctor, "post_command", side_effect=RuntimeError("boom")):
@@ -191,6 +299,19 @@ class DoctorTests(unittest.TestCase):
         for value in ("nan", "inf", "-inf", "0", "301"):
             with self.subTest(value=value):
                 with patch.object(sys, "argv", ["doctor.py", "--probe-timeout", value]):
+                    with self.assertRaises(SystemExit):
+                        doctor.parse_args()
+
+    def test_wait_timeout_values_must_be_finite(self):
+        for option, value in (
+            ("--wait-connected", "nan"),
+            ("--wait-connected", "inf"),
+            ("--wait-connected", "-1"),
+            ("--interval", "nan"),
+            ("--interval", "0"),
+        ):
+            with self.subTest(option=option, value=value):
+                with patch.object(sys, "argv", ["doctor.py", option, value]):
                     with self.assertRaises(SystemExit):
                         doctor.parse_args()
 

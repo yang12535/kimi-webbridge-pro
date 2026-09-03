@@ -86,9 +86,14 @@ python3 scripts/snapshot.py --session demo --mode compact
 
 # Full UTF-8 response saved under the system temp directory
 python3 scripts/snapshot.py --session demo --mode file
+
+# Save the raw daemon response to a chosen path (--path/--file are aliases)
+python3 scripts/snapshot.py --session demo --mode file --output ./snapshot.json --metadata
 ```
 
-`auto` is the recommended first choice for unfamiliar pages: it returns compact output for small snapshots and writes large or overfull snapshots to a UTF-8 JSON file. `compact` is for locating controls. Use `file` when the task requires article text or other static page content, then read only the relevant portions of that file.
+`auto` is the recommended first choice for unfamiliar pages. It pretty-prints compact JSON only while the final inline result fits the 12,000-byte budget; otherwise it writes the raw response to a private temporary directory and prints a small envelope with `mode`, `path`, `url_preview`, `title_preview`, `snapshot_bytes`, `file_bytes`, `compact_bytes`, `compact_elements`, and `reason`. The two preview fields are capped at 512 characters and must not be treated as exact URLs/titles when they end in `…`; read the raw file for exact values. The envelope never embeds the compact tree. Change the compact budget with `--max-inline-bytes`. The older `--auto-file-bytes N` option remains compatible as an additional raw-snapshot threshold that forces file mode at `N` bytes.
+
+`compact` is for locating controls and emits pretty-printed `elements`; it intentionally omits most static text. `file` preserves the original daemon response schema (`{ok,data:{url,title,tree,...}}`) and terminates the file with a newline. In explicit file mode stdout remains only the path and stderr stays empty for compatibility. Add `--metadata` when a small byte-count JSON record on stderr is useful. Use file mode for article text or other static content, then read only relevant file sections.
 On Windows, prefer `py -3` or `py`; do not assume a `python3` command exists.
 The Python helpers configure UTF-8 stdout themselves. If an older shell still renders mojibake, use `--mode file` and read the UTF-8 file instead.
 
@@ -127,13 +132,15 @@ python3 scripts/wait_for.py --session demo \
 | `--text-contains` | Accessibility tree text contains the value. |
 | `--visible-text` | Alias for `--text-contains`; prefer `--text-contains` in docs. |
 
+At least one condition is required. A condition-less call prints `{"matched":false,"error":{"code":"condition_required",...}}` on stdout and exits 2; it is not a generic sleep or page-settle command.
+
 ## Actions
 
 Action availability depends on the installed daemon and extension versions. The core actions below are broadly available. Extension 1.10.1 also exposes the version-dependent CDP input actions listed here; treat `Unknown tool` as an unavailable capability and follow [operations.md](operations.md).
 
 | Action | Arguments | Purpose |
 |---|---|---|
-| `navigate` | `url`, `newTab`, optional `group_title` | Navigate the selected tab or create a task-owned tab. |
+| `navigate` | `url`, `newTab`, optional `group_title` | Navigate the selected tab or create a task-owned tab. Helpers allow 45s by default so the daemon's roughly 30s load error can arrive intact. |
 | `find_tab` | `url`, optional `active` | Select an existing matching tab for the session. URL matching varies by extension version; see below. |
 | `list_tabs` | none | Inspect tabs associated with the session. It cannot enumerate every browser tab; use `find_tab` for discovery. |
 | `snapshot` | none | Read URL, title, accessibility tree, and `@e` refs. |
@@ -168,7 +175,7 @@ Action availability depends on the installed daemon and extension versions. The 
 
 ### Advanced action privacy
 
-- Use `upload` only for local files the user explicitly confirmed. Do not construct hidden upload requests.
+- Use `upload` only for local files the user explicitly confirmed. Each path should be absolute, exist locally, and be readable; the selector must resolve to an `<input type="file">`. Do not construct hidden upload requests.
 - Treat `save_as_pdf` outputs as sensitive artifacts. Delete temporary PDFs after use unless the user asked to keep them.
 - Use `network` only for task-scoped diagnosis. Filter narrowly and avoid unrelated request bodies.
 
@@ -217,6 +224,7 @@ Action availability depends on the installed daemon and extension versions. The 
 - Do not blindly repeat the click while waiting. Repeated clicks can open duplicate tabs or submit an action twice.
 - If the page remains unchanged, follow the tab and popup recovery flow below.
 - `wait_for.py` polls snapshots and exits nonzero on timeout; it does not repeat the original click.
+- If `navigate` returns its upstream `page load timeout (30s)` error, do not open another duplicate tab. First try one immediate snapshot in the same session: affected extension builds may still have the timed-out tab internally attached even though the daemon never received its `tabId`. Verify URL/title before continuing a conditioned wait. A narrow `find_tab` using the known destination is only a second best-effort check; in inspected extension 1.11.6 it generally cannot recover an inactive tab that was never registered to the session. If neither observation works, report the upstream ownership/recovery gap; only the daemon/extension can return and register the missing `tabId`.
 
 ## Tab and popup behavior
 
@@ -232,6 +240,12 @@ Action availability depends on the installed daemon and extension versions. The 
 ## Rich-text editors
 
 `fill` is a plain-text clear-and-replace action even when the target is `contenteditable`. It does not provide bold, italic, or range-preserving rich-text semantics. Prefer accessible editor toolbar controls. When `send_keys` is available, a page-specific fallback may create the exact selection with bounded `evaluate`, verify the selected text, then send an editor shortcut such as `Mod+B`. Verify the result with a screenshot. Broad `document.execCommand` calls can format the whole editor and should not be presented as a reliable generic solution.
+
+For framework-controlled `<input>` and `<textarea>` elements, call `fill` and read the value back after rerender. The inspected extension 1.11.6 attempts a native setter but selects the input prototype setter before the textarea setter, so a controlled `<textarea>` can still throw instead of updating; this root defect belongs to the extension. A page-specific fallback may call only the target's matching prototype setter and one bubbling `input` event on the exact element, then verify the value. Do not apply that recipe to `contenteditable` or custom widgets, and preserve the original extension error in the report.
+
+## Upload troubleshooting
+
+Before `upload`, verify the user-confirmed absolute paths and inspect only enough DOM state to confirm the selector targets `<input type="file">`. If the daemon returns CDP `-32000` / `Not allowed`, first compare `status.version` and `status.extension_version`. With the current v2 daemon and a connected extension, run unpinned `kimi-webbridge upgrade` to install its exactly matching daemon release, then retry once. Hiding/unhiding the input does not address a CDP permission failure. If matched versions still fail, report it as an upstream extension/daemon limitation; do not inject base64 file chunks into the page as a generic workaround.
 
 ## Keyboard and raw CDP boundaries
 

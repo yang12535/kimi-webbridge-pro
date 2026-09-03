@@ -2,9 +2,20 @@
 
 import argparse
 import json
+import math
 import time
 
 from webbridge_client import configure_utf8_output, post_command
+
+
+def positive_float(value):
+    try:
+        number = float(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be a number") from error
+    if not math.isfinite(number) or number <= 0:
+        raise argparse.ArgumentTypeError("must be finite and positive")
+    return number
 
 
 def parse_args():
@@ -20,8 +31,8 @@ def parse_args():
         dest="text_contains",
         help="Wait until accessible text contains this value.",
     )
-    parser.add_argument("--timeout", type=float, default=10)
-    parser.add_argument("--interval", type=float, default=1)
+    parser.add_argument("--timeout", type=positive_float, default=10)
+    parser.add_argument("--interval", type=positive_float, default=1)
     parser.add_argument(
         "--daemon-url",
         default="http://127.0.0.1:10086",
@@ -71,9 +82,20 @@ def main():
     configure_utf8_output()
     args = parse_args()
     if not any((args.url_contains, args.title_contains, args.text_contains)):
-        raise SystemExit("Specify at least one URL, title, or text condition.")
-    if args.timeout <= 0 or args.interval <= 0:
-        raise SystemExit("--timeout and --interval must be positive.")
+        print(
+            json.dumps(
+                {
+                    "matched": False,
+                    "error": {
+                        "code": "condition_required",
+                        "message": "Specify --url-contains, --title-contains, or --text-contains.",
+                    },
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        )
+        raise SystemExit(2)
 
     deadline = time.monotonic() + args.timeout
     last_data = {}

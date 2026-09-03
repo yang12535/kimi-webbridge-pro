@@ -176,8 +176,11 @@ WebBridge 安装器可能在 `.agents/skills/kimi-webbridge` 更新官方 skill�
 - 新旧截图协议兼容
 - 明确的触发边界和失败恢复
 
-上游版本负责随产品发布更新，Pro 版负责本机工作流的稳定性。两者命名不同，也避免
-同名 skill 的触发歧义。
+上游版本负责随产品发布更新，Pro 版负责本机工作流的稳定性。目录名虽然不同，但两个
+skill 同时被一个 Agent 发现时仍可能产生选择歧义；因此新装 daemon 时应
+使用官方 installer 的 `--no-skill`，或由用户明确决定保留哪一个。`doctor.py` 只在同一
+根目录确实检测到两个 skill 时给出确定告警；跨已知根目录时只给条件式提醒，因为那些
+目录也可能属于不同 Agent。它不会自动删除任何副本。
 
 `agents/openai.yaml` 是 OpenAI/Codex 的可选 UI 元数据，不参与 WebBridge 协议。
 其他 Agent 可以忽略它，只要能读取 `SKILL.md`、参考文档并执行对应的本地命令即可。

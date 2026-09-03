@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
 import argparse
-import ctypes
 import json
+import math
 import os
 import queue
+import re
 import socket
 import subprocess
 import threading
@@ -28,14 +29,69 @@ def default_pid_file():
     return Path.home() / ".kimi-webbridge" / "daemon.pid"
 
 
+def default_skills_dirs():
+    home = Path.home()
+    return [
+        home / ".kimi-code" / "skills",
+        home / ".agents" / "skills",
+        home / ".codex" / "skills",
+    ]
+
+
+def inspect_skill_conflicts(skills_dirs):
+    conflicts = []
+    official_paths = []
+    pro_paths = []
+    for skills_dir in skills_dirs:
+        root = Path(skills_dir).expanduser()
+        official = root / "kimi-webbridge"
+        pro = root / "kimi-webbridge-pro"
+        official_present = (official / "SKILL.md").is_file()
+        pro_present = (pro / "SKILL.md").is_file()
+        if official_present:
+            official_paths.append(str(official))
+        if pro_present:
+            pro_paths.append(str(pro))
+        if official_present and pro_present:
+            conflicts.append(
+                {
+                    "scope": "same_root",
+                    "skills_dir": str(root),
+                    "official": str(official),
+                    "pro": str(pro),
+                }
+            )
+    if not conflicts and official_paths and pro_paths:
+        conflicts.append(
+            {
+                "scope": "multiple_roots",
+                "official": official_paths,
+                "pro": pro_paths,
+            }
+        )
+    return conflicts
+
+
+def numeric_version(value):
+    if not isinstance(value, str):
+        return None
+    match = re.match(r"^[vV]?(\d+)\.(\d+)\.(\d+)", value.strip())
+    if not match:
+        return None
+    return tuple(int(part) for part in match.groups())
+
+
 def parse_status_output(stdout):
     text = stdout.strip()
     if not text:
         return None, "empty status output"
     try:
-        return json.loads(text), None
+        status = json.loads(text)
     except json.JSONDecodeError as error:
         return None, f"invalid status JSON: {error}"
+    if not isinstance(status, dict):
+        return None, "invalid status shape: expected a JSON object"
+    return status, None
 
 
 def run_binary(binary, *args, timeout=10):
@@ -66,6 +122,8 @@ def process_alive(pid):
     if pid <= 0:
         return False
     if os.name == "nt":
+        import ctypes
+
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
         handle = ctypes.windll.kernel32.OpenProcess(
             PROCESS_QUERY_LIMITED_INFORMATION, False, pid
@@ -106,8 +164,13 @@ def port_open(host, port, timeout=1.0):
         return False
 
 
+def format_daemon_url(host, port):
+    url_host = f"[{host}]" if ":" in host and not host.startswith("[") else host
+    return f"http://{url_host}:{port}"
+
+
 def probe_command(daemon_host, daemon_port, timeout):
-    daemon_url = f"http://{daemon_host}:{daemon_port}"
+    daemon_url = format_daemon_url(daemon_host, daemon_port)
     outcome = queue.Queue(maxsize=1)
 
     def request_probe():
@@ -232,10 +295,14 @@ def build_recommendations(report):
     elif not status:
         recommendations.append("Read daemon status output and recent logs; status JSON was unavailable.")
     elif not status.get("running"):
-        recommendations.append("Start the daemon, then rerun doctor with --wait-connected.")
-    elif not report.get("port_open"):
         recommendations.append(
-            "Daemon reports running but port 10086 is not reachable; inspect logs or restart once."
+            "Run doctor.py --start --wait-connected 20. Let the daemon handle a stale PID first; "
+            "remove daemon.pid manually only after verifying its process is gone."
+        )
+    elif not report.get("port_open"):
+        port = (report.get("daemon") or {}).get("port", 10086)
+        recommendations.append(
+            f"Daemon reports running but port {port} is not reachable; inspect logs or restart once."
         )
     elif not status.get("extension_connected"):
         recommendations.append(
@@ -254,7 +321,8 @@ def build_recommendations(report):
 
     if pid.get("stale"):
         recommendations.append(
-            "daemon.pid points to a non-running process; remove it only after verifying the PID is stale."
+            "daemon.pid points to a non-running process. Try doctor.py --start first; remove the PID file "
+            "only if that normal startup path still fails."
         )
 
     extension_id = status.get("extension_id")
@@ -262,6 +330,30 @@ def build_recommendations(report):
         recommendations.append(
             "Do not treat extension_id mismatch with the Chrome Web Store URL as a hard failure; status connectivity is authoritative."
         )
+
+    daemon_version = numeric_version(status.get("version") or status.get("daemon_version"))
+    extension_version = numeric_version(status.get("extension_version"))
+    versions_differ = daemon_version and extension_version and daemon_version != extension_version
+    if status.get("version_mismatch") or versions_differ:
+        recommendations.append(
+            "The daemon and browser extension versions differ. With the connected extension, run "
+            "kimi-webbridge upgrade without a version to install its matching daemon release, then retry "
+            "version-sensitive actions such as upload once."
+        )
+
+    for conflict in report.get("skill_conflicts") or []:
+        if conflict.get("scope") == "same_root":
+            recommendations.append(
+                "Both kimi-webbridge and kimi-webbridge-pro are installed in "
+                f"{conflict['skills_dir']}. Prefer the Pro skill for helper-driven workflows; "
+                "future daemon installs should use --no-skill unless the official skill is also needed."
+            )
+        else:
+            recommendations.append(
+                "kimi-webbridge and kimi-webbridge-pro were found in different known skills roots. "
+                "If the active Agent loads both roots, prefer Pro for helper-driven workflows; "
+                "otherwise this may be an intentional per-Agent installation."
+            )
 
     return recommendations
 
@@ -276,6 +368,23 @@ def finite_probe_timeout(value):
     return timeout
 
 
+def finite_nonnegative(value):
+    try:
+        number = float(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be a number") from error
+    if not math.isfinite(number) or number < 0:
+        raise argparse.ArgumentTypeError("must be finite and non-negative")
+    return number
+
+
+def finite_positive(value):
+    number = finite_nonnegative(value)
+    if number == 0:
+        raise argparse.ArgumentTypeError("must be positive")
+    return number
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Diagnose local Kimi WebBridge readiness; --probe optionally sends list_tabs."
@@ -284,8 +393,14 @@ def parse_args():
     parser.add_argument("--pid-file", type=Path, default=default_pid_file())
     parser.add_argument("--daemon-host", default="127.0.0.1")
     parser.add_argument("--daemon-port", type=int, default=10086)
-    parser.add_argument("--wait-connected", type=float, default=0)
-    parser.add_argument("--interval", type=float, default=2)
+    parser.add_argument("--wait-connected", type=finite_nonnegative, default=0)
+    parser.add_argument("--interval", type=finite_positive, default=2)
+    parser.add_argument(
+        "--skills-dir",
+        action="append",
+        type=Path,
+        help="Skills root to inspect for official/Pro coexistence; repeat for multiple roots.",
+    )
     parser.add_argument(
         "--start",
         action="store_true",
@@ -313,8 +428,6 @@ def parse_args():
 def main():
     configure_utf8_output()
     args = parse_args()
-    if args.wait_connected < 0 or args.interval <= 0:
-        raise SystemExit("--wait-connected must be non-negative and --interval must be positive.")
     report = status_snapshot(args.binary, args.daemon_host, args.daemon_port)
     status = report.get("status") or {}
     start_result = None
@@ -341,6 +454,9 @@ def main():
                 "reason": f"passive checks not ready: {readiness_reason(report)}",
             }
     report["pid_file"] = inspect_pid_file(args.pid_file)
+    report["skill_conflicts"] = inspect_skill_conflicts(
+        args.skills_dir if args.skills_dir is not None else default_skills_dirs()
+    )
     report["ready"] = report_ready(report)
     report["reason"] = readiness_reason(report)
     report["recommendations"] = build_recommendations(report)
