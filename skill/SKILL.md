@@ -33,7 +33,7 @@ Project source and issue tracker: https://github.com/yang12535/kimi-webbridge-pr
 - Page size is unknown? Start with `snapshot.py --auto`.
 - Need controls only? Use `snapshot.py --mode compact`.
 - Need article text, long static content, or Chinese text extraction? Use `snapshot.py --mode file` and read only the relevant file sections.
-- Sending Chinese, nested JSON, or quote-heavy arguments? Use a UTF-8 args file instead of inline shell quoting.
+- Sending Chinese, nested JSON, or quote-heavy arguments from Bash? Use `--args-stdin`; keep `--args-file` for an existing or reusable payload.
 - After `navigate` or a click that should change state? Run `wait_for.py`, then take a fresh snapshot and inspect URL/title.
 - Click appears unchanged? Check `list_tabs`, popup blocking, then recover the real link with bounded `evaluate`.
 
@@ -151,7 +151,7 @@ When visible activation is necessary and the installed version supports the adva
 
 ```powershell
 & scripts\invoke.ps1 -Session "game" -Action "find_tab" -ActionArgs @{
-  url = "https://neal.fun/password-game/*"
+  url = "https://neal.fun/password-game/"
 }
 & scripts\invoke.ps1 -Session "game" -Action "cdp" -ActionArgs @{
   method = "Page.bringToFront"
@@ -162,7 +162,7 @@ py -3 scripts\snapshot.py --session "game" --auto
 
 ```bash
 scripts/invoke.sh --session game --action find_tab --args-stdin <<'JSON'
-{"url":"https://neal.fun/password-game/*"}
+{"url":"https://neal.fun/password-game/"}
 JSON
 scripts/invoke.sh --session game --action cdp --args-stdin <<'JSON'
 {"method":"Page.bringToFront","params":{}}
