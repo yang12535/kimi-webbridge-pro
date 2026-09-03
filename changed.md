@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `doctor.py --probe` sends a real `list_tabs` command after the passive checks. A failed probe marks the report not ready with reason `extension connected but command probe failed` and recommends a daemon restart, catching zombie extension connections that `status` cannot detect. `--probe-timeout` is a finite wall-clock deadline (default 10s). The probe runs only when the passive checks are ready, validates the full `list_tabs` response shape, and is marked `skipped` otherwise. Transport, HTTP-body, malformed JSON, invalid UTF-8, and wrong-shape response failures are normalized so doctor still emits a JSON report.
+
 ### Fixed
 
 - Documented that broad wildcard `find_tab active:true` calls cannot reliably discover an unknown current tab, and require a known URL/hostname or a dedicated host-agent API instead.
@@ -13,6 +17,8 @@
 - Clarified that factual search may accompany a browser-state task even though a standalone lookup should not trigger WebBridge.
 - Added `invoke.sh --args-stdin` and `--args-file -` so Bash callers can send UTF-8 emoji or nested JSON without temporary files.
 - Made `invoke.sh` reject interactive stdin waits and empty inline JSON payloads before building a request.
+- Documented the version-dependent `find_tab` URL matching contract: current releases should receive a known full URL or hostname, older Chrome-style wildcard behavior must not be assumed, and `list_tabs` only covers session-associated tabs.
+- Added an operations runbook row for "extension connected but every action fails" (probe, then restart once), and guidance to prefer upgrading the extension over downgrading the daemon on version mismatch; an unknown version is not proof of being outdated.
 - Aligned `doctor.py` readiness `reason` and recommendations when the daemon reports running but its port is unreachable.
 - Clamped `doctor.py` and `wait_for.py` polling sleeps to the remaining timeout when `--interval` exceeds `--timeout`, and stopped `wait_for.py` from sending a final snapshot request after the deadline.
 - Replaced recursive accessibility-tree walking in `snapshot.py` and `wait_for.py` with iterative traversal to avoid `RecursionError` on deeply nested pages.

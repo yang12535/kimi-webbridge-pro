@@ -134,8 +134,8 @@ Action availability depends on the installed daemon and extension versions. The 
 | Action | Arguments | Purpose |
 |---|---|---|
 | `navigate` | `url`, `newTab`, optional `group_title` | Navigate the selected tab or create a task-owned tab. |
-| `find_tab` | `url`, optional `active` | Select an existing matching tab for the session. |
-| `list_tabs` | none | Inspect tabs associated with the session. |
+| `find_tab` | `url`, optional `active` | Select an existing matching tab for the session. URL matching varies by extension version; see below. |
+| `list_tabs` | none | Inspect tabs associated with the session. It cannot enumerate every browser tab; use `find_tab` for discovery. |
 | `snapshot` | none | Read URL, title, accessibility tree, and `@e` refs. |
 | `click` | `selector` | Click an `@e` ref or CSS selector. |
 | `fill` | `selector`, `value` | Replace plain text in inputs, textareas, or contenteditable editors; rich-text markup is not preserved. |
@@ -150,6 +150,13 @@ Action availability depends on the installed daemon and extension versions. The 
 | `save_as_pdf` | optional print settings and `file_name` | Render the current page as a PDF. |
 | `close_tab` | none | Close the selected task-owned tab. |
 | `close_session` | none | Close all tabs associated with the session. Use only when every tab is task-owned. |
+
+### `find_tab` URL matching
+
+- Prefer a known full URL copied from `list_tabs`/`navigate`, for example `https://console.example.com/cam/user`, or a known hostname such as `console.example.com`.
+- Matching is version-dependent. Extension 1.11.6 normalizes non-wildcard URL/hostname input to a host match and ignores the path. Older releases accepted some Chrome-style match patterns. Do not treat either behavior as a stable cross-version substring or wildcard contract.
+- Bare fragments such as `http`, `console`, or `.com`, host-and-port shorthand, and broad patterns such as `*://*/*` are not reliable across supported versions.
+- Use `active:true` only with a known URL/hostname. It means "borrow the foreground tab if that known host matches," not "enumerate or guess the current tab."
 
 ## Privacy constraints
 

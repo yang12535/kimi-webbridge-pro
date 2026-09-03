@@ -4,12 +4,14 @@ import argparse
 import ctypes
 import json
 import os
+import queue
 import socket
 import subprocess
+import threading
 import time
 from pathlib import Path
 
-from webbridge_client import configure_utf8_output
+from webbridge_client import configure_utf8_output, post_command
 
 
 STORE_EXTENSION_ID = "fldmhceldgbpfpkbgopacenieobmligc"
@@ -104,6 +106,48 @@ def port_open(host, port, timeout=1.0):
         return False
 
 
+def probe_command(daemon_host, daemon_port, timeout):
+    daemon_url = f"http://{daemon_host}:{daemon_port}"
+    outcome = queue.Queue(maxsize=1)
+
+    def request_probe():
+        try:
+            result = post_command("list_tabs", {}, "doctor-probe", daemon_url, timeout)
+        except Exception as error:
+            outcome.put(("error", error))
+        else:
+            outcome.put(("result", result))
+
+    worker = threading.Thread(target=request_probe, daemon=True)
+    worker.start()
+    worker.join(timeout)
+    if worker.is_alive():
+        return {"ok": False, "error": f"probe exceeded {timeout:g}s wall-clock timeout"}
+
+    try:
+        kind, value = outcome.get_nowait()
+    except queue.Empty:
+        return {"ok": False, "error": "probe worker exited without a result"}
+    if kind == "error":
+        return {"ok": False, "error": str(value)}
+    result = value
+    if result.get("ok") is not True:
+        return {"ok": False, "error": "command response did not contain ok=true"}
+    data = result.get("data")
+    if not isinstance(data, dict):
+        return {"ok": False, "error": "list_tabs response data is not an object"}
+    if data.get("success") is not True:
+        return {"ok": False, "error": data.get("error") or "command returned success=false"}
+    if not isinstance(data.get("tabs"), list):
+        return {"ok": False, "error": "list_tabs response did not contain a tabs array"}
+    return {"ok": True, "tab_count": len(data["tabs"])}
+
+
+def probe_failed(report):
+    probe = report.get("probe")
+    return isinstance(probe, dict) and probe.get("ok") is False
+
+
 def status_snapshot(binary, daemon_host, daemon_port):
     binary_exists = Path(binary).exists()
     status = None
@@ -130,6 +174,8 @@ def status_snapshot(binary, daemon_host, daemon_port):
 
 def report_ready(report):
     status = report.get("status") or {}
+    if probe_failed(report):
+        return False
     return bool(
         status.get("running")
         and status.get("extension_connected")
@@ -150,6 +196,8 @@ def readiness_reason(report):
         return "daemon port not reachable"
     if not status.get("extension_connected"):
         return "extension not connected"
+    if probe_failed(report):
+        return "extension connected but command probe failed"
     return "ready"
 
 
@@ -194,9 +242,15 @@ def build_recommendations(report):
             "Open Chrome and enable the Kimi WebBridge extension; rerun with --wait-connected before giving up."
         )
     else:
-        recommendations.append(
-            "Ready: daemon is running, the browser extension is connected, and the daemon port is reachable."
-        )
+        if probe_failed(report):
+            recommendations.append(
+                "Status looks ready but a real command failed; the extension connection may be a zombie. "
+                "Restart the daemon once (kimi-webbridge restart), then retry."
+            )
+        else:
+            recommendations.append(
+                "Ready: daemon is running, the browser extension is connected, and the daemon port is reachable."
+            )
 
     if pid.get("stale"):
         recommendations.append(
@@ -212,9 +266,19 @@ def build_recommendations(report):
     return recommendations
 
 
+def finite_probe_timeout(value):
+    try:
+        timeout = float(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be a number") from error
+    if not 0 < timeout <= 300 or timeout in (float("inf"), float("-inf")):
+        raise argparse.ArgumentTypeError("must be finite and between 0 and 300 seconds")
+    return timeout
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Diagnose local Kimi WebBridge readiness without sending browser actions."
+        description="Diagnose local Kimi WebBridge readiness; --probe optionally sends list_tabs."
     )
     parser.add_argument("--binary", type=Path, default=default_binary_path())
     parser.add_argument("--pid-file", type=Path, default=default_pid_file())
@@ -232,6 +296,17 @@ def parse_args():
         action="store_true",
         help="Compatibility flag; doctor output is always JSON.",
     )
+    parser.add_argument(
+        "--probe",
+        action="store_true",
+        help="Send a real list_tabs command to detect zombie extension connections.",
+    )
+    parser.add_argument(
+        "--probe-timeout",
+        type=finite_probe_timeout,
+        default=10,
+        help="Seconds to wait for the --probe command response.",
+    )
     return parser.parse_args()
 
 
@@ -240,7 +315,6 @@ def main():
     args = parse_args()
     if args.wait_connected < 0 or args.interval <= 0:
         raise SystemExit("--wait-connected must be non-negative and --interval must be positive.")
-
     report = status_snapshot(args.binary, args.daemon_host, args.daemon_port)
     status = report.get("status") or {}
     start_result = None
@@ -258,6 +332,14 @@ def main():
 
     if start_result is not None:
         report["start"] = start_result
+    if args.probe:
+        if report_ready(report):
+            report["probe"] = probe_command(args.daemon_host, args.daemon_port, args.probe_timeout)
+        else:
+            report["probe"] = {
+                "skipped": True,
+                "reason": f"passive checks not ready: {readiness_reason(report)}",
+            }
     report["pid_file"] = inspect_pid_file(args.pid_file)
     report["ready"] = report_ready(report)
     report["reason"] = readiness_reason(report)

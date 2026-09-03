@@ -14,7 +14,7 @@ py -3 scripts\doctor.py --wait-connected 20
 python3 scripts/doctor.py --wait-connected 20
 ```
 
-`doctor.py` checks the binary path, daemon status, `127.0.0.1:10086`, `daemon.pid`, and extension connection. It always prints JSON and accepts `--json` as an explicit compatibility flag for agents that require one. It does not send browser actions. It starts the daemon only when `--start` is explicitly passed.
+`doctor.py` checks the binary path, daemon status, `127.0.0.1:10086`, `daemon.pid`, and extension connection. It always prints JSON and accepts `--json` as an explicit compatibility flag for agents that require one. It does not send browser actions unless `--probe` is passed. It starts the daemon only when `--start` is explicitly passed.
 
 Run:
 
@@ -97,10 +97,13 @@ curl -fsSL https://cdn.kimi.com/webbridge/install.sh | bash
 | Commands time out | Read recent logs for error or panic messages, then retry once after a restart. |
 | Extension remains disconnected | Open the browser, install or enable the Chrome Web Store extension, and retry status. |
 | Extension is connected but actions fail | Read logs for version, multi-browser, or extension-upgrade errors. |
+| Extension connected but every action fails or times out | Run `doctor.py --probe` to confirm, then restart the daemon once (`kimi-webbridge restart`) and retry. The extension WebSocket can be a zombie that `status` cannot detect. |
 | The error asks for an extension update | Update the extension from the Chrome Web Store link above; do not repeatedly retry the action. |
 | An action returns `Unknown tool` | Treat it as unavailable in the installed daemon/extension pair. Check both versions and update through official channels before retrying once; do not silently replace it with unrestricted `evaluate` or `cdp`. |
 
 `status.extension_id` may differ from the Chrome Web Store URL ID. Treat `doctor.py`'s `ready` result as the authoritative readiness signal because it includes daemon status, extension connectivity, and the `127.0.0.1:10086` port probe; use the ID only as supporting diagnostic context.
+
+When the daemon reports a version mismatch, prefer upgrading the extension from the Chrome Web Store over downgrading the daemon. An unknown or unparsed skill or daemon version is not proof of being outdated; check release notes before changing versions.
 
 ## Recover a stale PID
 
