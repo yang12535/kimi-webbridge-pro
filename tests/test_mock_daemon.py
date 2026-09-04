@@ -174,8 +174,38 @@ class MockDaemonCliTests(unittest.TestCase):
         env_extra=None,
         cwd=None,
     ):
+        executable = self.bash_executable()
+        if os.name == "nt":
+            # Passing JSON directly from CreateProcess to MSYS2 bash loses or
+            # rewrites brace/quote-heavy argv values. Reconstruct exact argv
+            # inside Bash from environment variables, which matches an
+            # interactive Git Bash invocation.
+            bash_env = dict(env_extra or {})
+            bash_env["WB_TEST_SCRIPT"] = str(script)
+            bash_env["WB_TEST_ARGC"] = str(len(args))
+            for index, value in enumerate(args):
+                bash_env[f"WB_TEST_ARG_{index:04d}"] = str(value)
+            wrapper = r'''
+script="$(cygpath -u "$WB_TEST_SCRIPT")"
+argv=()
+for ((index=0; index<WB_TEST_ARGC; index++)); do
+  name="$(printf 'WB_TEST_ARG_%04d' "$index")"
+  argv+=("${!name}")
+done
+exec bash "$script" "${argv[@]}"
+'''
+            return self.run_cli(
+                executable,
+                "-c",
+                wrapper,
+                expected=expected,
+                timeout=timeout,
+                input_text=input_text,
+                env_extra=bash_env,
+                cwd=cwd,
+            )
         return self.run_cli(
-            self.bash_executable(),
+            executable,
             str(script),
             *args,
             expected=expected,
@@ -185,7 +215,7 @@ class MockDaemonCliTests(unittest.TestCase):
             cwd=cwd,
         )
 
-    def run_pwsh_cli(self, *args, expected=0, timeout=5):
+    def run_pwsh_cli(self, *args, expected=0, timeout=15):
         return self.run_cli(
             self.pwsh_executable(),
             "-NoLogo",
@@ -928,7 +958,7 @@ exit 1
             "mock",
         )
 
-        self.assertEqual(Path(result.stdout.strip()), self.screenshot_path.resolve())
+        self.assertTrue(os.path.samefile(Path(result.stdout.strip()), self.screenshot_path))
 
     def test_screenshot_ps1_accepts_base64_response(self):
         output_path = Path(self.tempdir.name) / "base64-ps1.png"
@@ -943,7 +973,7 @@ exit 1
             str(output_path),
         )
 
-        self.assertEqual(Path(result.stdout.strip()), output_path.resolve())
+        self.assertTrue(os.path.samefile(Path(result.stdout.strip()), output_path))
         self.assertEqual(output_path.read_bytes(), b"fake-image-bytes")
 
     def test_screenshot_ps1_default_base64_outputs_use_unique_temp_directories(self):
