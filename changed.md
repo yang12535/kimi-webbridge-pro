@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.1.0 - 2026-09-05
+
 ### Added
 
 - `doctor.py --probe` sends a real `list_tabs` command after the passive checks. A failed probe marks the report not ready with reason `extension connected but command probe failed` and recommends a daemon restart, catching zombie extension connections that `status` cannot detect. `--probe-timeout` is a finite wall-clock deadline (default 10s). The probe runs only when the passive checks are ready, validates the full `list_tabs` response shape, and is marked `skipped` otherwise. Transport, HTTP-body, malformed JSON, invalid UTF-8, and wrong-shape response failures are normalized so doctor still emits a JSON report.
