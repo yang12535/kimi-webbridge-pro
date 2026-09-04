@@ -187,6 +187,12 @@ class MockDaemonCliTests(unittest.TestCase):
                 bash_env[f"WB_TEST_ARG_{index:04d}"] = str(value)
             wrapper = r'''
 script="$(cygpath -u "$WB_TEST_SCRIPT")"
+if [[ -n "${WB_TEST_PREPEND_PATH:-}" ]]; then
+  export PATH="$(cygpath -u "$WB_TEST_PREPEND_PATH"):$PATH"
+fi
+if [[ -n "${WB_TEST_CURL_ARGS_LOG:-}" ]]; then
+  export CURL_ARGS_LOG="$(cygpath -u "$WB_TEST_CURL_ARGS_LOG")"
+fi
 argv=()
 for ((index=0; index<WB_TEST_ARGC; index++)); do
   name="$(printf 'WB_TEST_ARG_%04d' "$index")"
@@ -429,6 +435,8 @@ printf '200'
                 env_extra={
                     "PATH": f"{fake_dir}{os.pathsep}{os.environ['PATH']}",
                     "CURL_ARGS_LOG": str(args_log),
+                    "WB_TEST_PREPEND_PATH": str(fake_dir),
+                    "WB_TEST_CURL_ARGS_LOG": str(args_log),
                 },
             )
 
