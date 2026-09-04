@@ -9,7 +9,7 @@ def configure_utf8_output():
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure:
-            reconfigure(encoding="utf-8")
+            reconfigure(encoding="utf-8", newline="\n")
 
 
 def post_command(action, args, session, daemon_url, timeout):

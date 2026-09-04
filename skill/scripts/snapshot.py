@@ -2,10 +2,31 @@
 
 import argparse
 import json
+import sys
 import tempfile
 from pathlib import Path
 
 from webbridge_client import configure_utf8_output, post_command
+
+
+def positive_int(value):
+    try:
+        number = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be an integer") from error
+    if number <= 0:
+        raise argparse.ArgumentTypeError("must be positive")
+    return number
+
+
+def nonnegative_int(value):
+    try:
+        number = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be an integer") from error
+    if number < 0:
+        raise argparse.ArgumentTypeError("must be non-negative")
+    return number
 
 
 def parse_args():
@@ -13,35 +34,59 @@ def parse_args():
         description="Capture a WebBridge snapshot without flooding agent context."
     )
     parser.add_argument("--session", help="Stable task session name")
-    parser.add_argument(
+    strategy = parser.add_mutually_exclusive_group()
+    strategy.add_argument(
         "--mode",
         choices=("auto", "compact", "file", "full"),
         default="compact",
         help="auto strategy, compact summary, file path, or full JSON output",
     )
-    parser.add_argument(
+    strategy.add_argument(
         "--auto",
-        action="store_true",
+        action="store_const",
+        dest="mode",
+        const="auto",
         help="Shortcut for --mode auto.",
     )
-    parser.add_argument("--output", type=Path, help="Path used by file mode")
+    parser.add_argument(
+        "--output",
+        "--path",
+        "--file",
+        dest="output",
+        type=Path,
+        help="Destination used by file/auto mode; --path and --file are aliases.",
+    )
+    parser.add_argument(
+        "--metadata",
+        action="store_true",
+        help="In explicit file mode, also print byte-count JSON to stderr.",
+    )
     parser.add_argument(
         "--daemon-url",
         default="http://127.0.0.1:10086",
         help="WebBridge daemon URL",
     )
-    parser.add_argument("--timeout", type=int, default=30)
-    parser.add_argument("--max-elements", type=int, default=250)
-    parser.add_argument("--max-name-length", type=int, default=240)
+    parser.add_argument("--timeout", type=positive_int, default=30)
+    parser.add_argument("--max-elements", type=positive_int, default=250)
+    parser.add_argument("--max-name-length", type=positive_int, default=240)
+    parser.add_argument(
+        "--max-inline-bytes",
+        dest="max_inline_bytes",
+        type=positive_int,
+        default=12000,
+        help="Auto mode inline compact-output budget (default: 12000 bytes).",
+    )
     parser.add_argument(
         "--auto-file-bytes",
-        type=int,
-        default=120000,
-        help="Auto mode writes a file when the raw snapshot is at least this large.",
+        dest="raw_file_bytes",
+        type=nonnegative_int,
+        help="Legacy raw-snapshot threshold; also force file mode at this byte count.",
     )
     args = parser.parse_args()
-    if args.auto:
-        args.mode = "auto"
+    if args.output and args.mode not in {"auto", "file"}:
+        parser.error("--output/--path/--file requires --mode file or --auto")
+    if args.metadata and args.mode != "file":
+        parser.error("--metadata requires --mode file")
     return args
 
 
@@ -61,10 +106,11 @@ def request_snapshot(args):
 def compact_snapshot(response, max_elements, max_name_length):
     data = response.get("data") or {}
     elements = []
+    collection_limit = max_elements + 1
 
     # Keep semantic landmarks and actionable refs; omit most static text.
     stack = [iter([data.get("tree")])]
-    while stack and len(elements) < max_elements:
+    while stack and len(elements) < collection_limit:
         try:
             nodes = next(stack[-1])
         except StopIteration:
@@ -95,19 +141,19 @@ def compact_snapshot(response, max_elements, max_name_length):
         children = nodes.get("children")
         if children is not None:
             stack.append(iter(children if isinstance(children, list) else [children]))
+    truncated = len(elements) > max_elements
     return {
         "ok": response.get("ok"),
         "url": data.get("url"),
         "title": data.get("title"),
-        "elements": elements,
-        "truncated": len(elements) >= max_elements,
+        "elements": elements[:max_elements],
+        "truncated": truncated,
     }
 
 
 def write_snapshot(response, output):
     if output is None:
-        directory = Path(tempfile.gettempdir()) / "kimi-webbridge-snapshots"
-        directory.mkdir(parents=True, exist_ok=True)
+        directory = Path(tempfile.mkdtemp(prefix="kimi-webbridge-snapshots-"))
         handle = tempfile.NamedTemporaryFile(
             mode="w",
             encoding="utf-8",
@@ -123,11 +169,23 @@ def write_snapshot(response, output):
 
     with handle:
         json.dump(response, handle, ensure_ascii=False, separators=(",", ":"))
+        handle.write("\n")
     return output.resolve()
 
 
 def snapshot_size_bytes(response):
     return len(json.dumps(response, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+
+def bounded_preview(value, max_characters=512):
+    if value is None:
+        return None
+    text = str(value)
+    if len(text) <= max_characters:
+        return text
+    if max_characters <= 0:
+        return ""
+    return text[: max_characters - 1] + "…"
 
 
 def auto_snapshot(response, args):
@@ -137,10 +195,17 @@ def auto_snapshot(response, args):
         max_elements=args.max_elements,
         max_name_length=args.max_name_length,
     )
-    should_write_file = raw_bytes >= args.auto_file_bytes or compact["truncated"]
+    compact["mode"] = "compact"
+    compact["snapshot_bytes"] = raw_bytes
+    compact_bytes = len(json.dumps(compact, ensure_ascii=False, indent=2).encode("utf-8")) + 1
+    raw_file_bytes = getattr(args, "raw_file_bytes", None)
+    legacy_raw_limit_reached = raw_file_bytes is not None and raw_bytes >= raw_file_bytes
+    should_write_file = (
+        compact_bytes > args.max_inline_bytes
+        or compact["truncated"]
+        or legacy_raw_limit_reached
+    )
     if not should_write_file:
-        compact["mode"] = "compact"
-        compact["snapshot_bytes"] = raw_bytes
         return compact
 
     path = write_snapshot(response, args.output)
@@ -148,15 +213,21 @@ def auto_snapshot(response, args):
         "ok": response.get("ok"),
         "mode": "file",
         "path": str(path),
-        "url": (response.get("data") or {}).get("url"),
-        "title": (response.get("data") or {}).get("title"),
+        "url_preview": bounded_preview((response.get("data") or {}).get("url")),
+        "title_preview": bounded_preview((response.get("data") or {}).get("title")),
         "snapshot_bytes": raw_bytes,
+        "file_bytes": path.stat().st_size,
+        "compact_bytes": compact_bytes,
+        "compact_elements": len(compact["elements"]),
         "reason": (
             "compact summary reached max-elements"
             if compact["truncated"]
-            else "raw snapshot exceeds auto-file-bytes"
+            else (
+                "compact output exceeds max-inline-bytes"
+                if compact_bytes > args.max_inline_bytes
+                else "raw snapshot reached legacy auto-file-bytes"
+            )
         ),
-        "compact_preview": compact,
     }
 
 
@@ -167,18 +238,33 @@ def main():
 
     if args.mode == "auto":
         result = auto_snapshot(response, args)
-        print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
     elif args.mode == "file":
-        print(write_snapshot(response, args.output))
+        path = write_snapshot(response, args.output)
+        print(path)
+        if args.metadata:
+            print(
+                json.dumps(
+                    {
+                        "mode": "file",
+                        "path": str(path),
+                        "snapshot_bytes": snapshot_size_bytes(response),
+                        "file_bytes": path.stat().st_size,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                file=sys.stderr,
+            )
     elif args.mode == "full":
-        print(json.dumps(response, ensure_ascii=False, separators=(",", ":")))
+        print(json.dumps(response, ensure_ascii=False, indent=2))
     else:
         result = compact_snapshot(
             response,
             max_elements=args.max_elements,
             max_name_length=args.max_name_length,
         )
-        print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

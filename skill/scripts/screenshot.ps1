@@ -110,12 +110,20 @@ if ($response.data.path) {
     }
 }
 
-if (-not $OutputPath) {
-    $outputDirectory = Join-Path $env:TEMP "kimi-webbridge-screenshots"
-    New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+$privateDefaultOutput = -not $OutputPath
+if ($privateDefaultOutput) {
+    $outputDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("kimi-webbridge-screenshots-" + [System.Guid]::NewGuid().ToString("N"))
+    if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+        $privateDirectoryMode = [System.IO.UnixFileMode]::UserRead -bor
+            [System.IO.UnixFileMode]::UserWrite -bor
+            [System.IO.UnixFileMode]::UserExecute
+        [System.IO.Directory]::CreateDirectory($outputDirectory, $privateDirectoryMode) | Out-Null
+    }
+    else {
+        New-Item -ItemType Directory -Path $outputDirectory | Out-Null
+    }
     $extension = if ($Format -eq "jpeg") { "jpg" } else { "png" }
-    $timestamp = Get-Date -Format "yyyyMMdd_HHmmss_fff"
-    $OutputPath = Join-Path $outputDirectory "$timestamp.$extension"
+    $OutputPath = Join-Path $outputDirectory "screenshot.$extension"
 }
 
 $resolvedOutputPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
@@ -134,10 +142,24 @@ else {
         throw "Kimi WebBridge returned neither a screenshot path nor image data."
     }
 
-    [System.IO.File]::WriteAllBytes(
-        $resolvedOutputPath,
-        [System.Convert]::FromBase64String($encodedImage)
-    )
+    $imageBytes = [System.Convert]::FromBase64String($encodedImage)
+    if ($privateDefaultOutput -and [System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+        $fileOptions = [System.IO.FileStreamOptions]::new()
+        $fileOptions.Mode = [System.IO.FileMode]::CreateNew
+        $fileOptions.Access = [System.IO.FileAccess]::Write
+        $fileOptions.Share = [System.IO.FileShare]::None
+        $fileOptions.UnixCreateMode = [System.IO.UnixFileMode]::UserRead -bor [System.IO.UnixFileMode]::UserWrite
+        $outputStream = [System.IO.File]::Open($resolvedOutputPath, $fileOptions)
+        try {
+            $outputStream.Write($imageBytes, 0, $imageBytes.Length)
+        }
+        finally {
+            $outputStream.Dispose()
+        }
+    }
+    else {
+        [System.IO.File]::WriteAllBytes($resolvedOutputPath, $imageBytes)
+    }
 }
 
 $resolvedOutputPath

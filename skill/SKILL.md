@@ -1,6 +1,6 @@
 ---
 name: kimi-webbridge-pro
-description: "Control the user's real logged-in browser through the local Kimi WebBridge daemon. Use when the task requires a real browser session, login state, existing tabs, screenshots, form filling, confirmed file uploads, PDF saving, or network diagnosis. Prefer a dedicated API, MCP tool, or site-specific skill when one is explicitly available and sufficient. Do not use for pure web search, factual lookup, or tasks that do not need browser state."
+description: "Control the user's real logged-in browser through the local Kimi WebBridge daemon with safe cross-platform helpers, bounded snapshots, conditioned waits, and recovery diagnostics. When both kimi-webbridge and kimi-webbridge-pro are installed, prefer this Pro skill for helper-driven browser workflows. Use when the task requires a real browser session, login state, existing tabs, screenshots, form filling, confirmed file uploads, PDF saving, or network diagnosis. Prefer a dedicated API, MCP tool, or site-specific skill when one is explicitly available and sufficient. Do not use for pure web search, factual lookup, or tasks that do not need browser state."
 ---
 
 # Kimi WebBridge Pro
@@ -34,7 +34,7 @@ Project source and issue tracker: https://github.com/yang12535/kimi-webbridge-pr
 - Need controls only? Use `snapshot.py --mode compact`.
 - Need article text, long static content, or Chinese text extraction? Use `snapshot.py --mode file` and read only the relevant file sections.
 - Sending Chinese, nested JSON, or quote-heavy arguments from Bash? Use `--args-stdin`; keep `--args-file` for an existing or reusable payload.
-- After `navigate` or a click that should change state? Run `wait_for.py`, then take a fresh snapshot and inspect URL/title.
+- After `navigate` or a click that should change state? Run a conditioned wait such as `python3 scripts/wait_for.py --session research --url-contains example.com --timeout 15`, then take a fresh snapshot and inspect URL/title.
 - Click appears unchanged? Check `list_tabs`, popup blocking, then recover the real link with bounded `evaluate`.
 
 ## Quick action map
@@ -52,7 +52,7 @@ Use this as the minimum dashboard. Read [protocol.md](references/protocol.md) fo
 | `mouse_click` | Send a CDP mouse click to an element when DOM-level `click` is rejected. |
 | `key_type` | Insert arbitrary Unicode text into the focused control. |
 | `send_keys` | Send named keys or shortcuts such as `Enter`, `Tab`, or `Mod+B`. |
-| `evaluate` | Read bounded page state or recover a real link when normal actions are insufficient. |
+| `evaluate (code)` | Read bounded page state or recover a real link when normal actions are insufficient; the argument key is `code`, not `expression`. |
 | `screenshot` | Capture the page or an element; use the helper to handle path/base64 variants. |
 | `close_tab` | Close the selected task-owned tab after verification. |
 
@@ -104,7 +104,7 @@ JSON
 `--args-file PATH` remains available for reusable or generated payloads. See [protocol.md](references/protocol.md).
 
 Use [screenshot.py](scripts/screenshot.py) for cross-platform screenshots. PowerShell-only workflows may continue using [screenshot.ps1](scripts/screenshot.ps1). Both accept current path-based responses and older base64 responses without flooding context.
-For large or unknown pages, use [snapshot.py](scripts/snapshot.py) with `--auto` first. It returns compact output for small pages and writes large snapshots to a UTF-8 JSON file.
+For large or unknown pages, use [snapshot.py](scripts/snapshot.py) with `--auto` first. It keeps pretty-printed compact output within a 12,000-byte inline budget and otherwise returns a small file envelope. Use `--mode file --output PATH` (aliases: `--path`, `--file`) when you need the raw daemon schema at a chosen path.
 Use [doctor.py](scripts/doctor.py) for no-action readiness checks: binary presence, daemon status, port reachability, PID staleness, and extension connection.
 Run Python helpers with `py -3` (or `py`) on Windows and `python3` on POSIX. Do not assume `python3` is the Windows launcher.
 
@@ -178,7 +178,7 @@ Treat `Page.bringToFront` as version-dependent and verify the resulting URL/titl
 2. Use `find_tab` for a user-owned existing tab, or `navigate` with `newTab:true` for a task-owned tab.
 3. Take `snapshot.py --auto` for unknown pages, or `snapshot.py --mode compact` when you only need controls.
 4. Use snapshot `@e` refs with `click` and `fill`.
-5. After navigation or a click that should change the page, use [wait_for.py](scripts/wait_for.py) or poll URL/title up to three times.
+5. After navigation or a click that should change the page, use [wait_for.py](scripts/wait_for.py) with an explicit expected condition, for example `--url-contains example.com` or `--text-contains Saved`.
 6. Take a new snapshot after a substantial DOM change; old refs may be stale.
 7. Use `list_tabs` before cleanup and prefer `close_tab` for task-owned tabs. Do not close user-owned tabs.
 
@@ -187,6 +187,7 @@ Do not use broad URL wildcards with `active:true`; active preference is reliable
 Do not use one session to alternate between an original page and a side lookup tab. Use a second session for the side tab and keep the original session bound to the original page; this avoids relying on daemon-side focus switching.
 Treat `@e` values as WebBridge snapshot references, not DOM attributes. Do not query them with selectors such as `[data-ref="@e1"]`.
 When using `wait_for.py`, the text condition flag is `--text-contains`; `--visible-text` is accepted as an alias.
+Calling `wait_for.py` without a condition is an error, not a generic sleep; it prints JSON with code `condition_required` and exits 2.
 
 ## Recover when the page looks unchanged
 
@@ -204,6 +205,8 @@ When using `wait_for.py`, the text condition flag is `--text-contains`; `--visib
 - Prefer the editor's accessible toolbar buttons. When `send_keys` is available, a page-specific workflow may use bounded `evaluate` to select the exact DOM range and then `send_keys` with `Mod+B` or another editor shortcut.
 - Preserve the smallest possible DOM range and verify the selected text before sending a shortcut. Take a screenshot afterward; do not use broad `document.execCommand` calls that can format the entire editor.
 - If neither native controls nor a safely bounded page-specific edit is available, report the formatting step as unsupported instead of claiming success.
+
+For framework-controlled `<input>` or `<textarea>` fields, call `fill` first and read the value back. If the installed extension still rejects the field, use only a page-specific fallback: select the exact element, call the matching native prototype value setter, dispatch one bubbling `input` event, and verify the value after the framework rerenders. Do not generalize this fallback to `contenteditable` or custom widgets, and do not hide an extension error.
 
 ## Combine browser state with factual lookup
 

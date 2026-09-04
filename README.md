@@ -70,10 +70,13 @@ irm https://cdn.kimi.com/webbridge/install.ps1 | iex
 POSIX 官方安装命令：
 
 ```bash
-curl -fsSL https://cdn.kimi.com/webbridge/install.sh | bash
+curl -fsSL https://cdn.kimi.com/webbridge/install.sh | bash -s -- --no-skill
 ```
 
 执行远程安装脚本前，请确认域名和脚本来源符合你的安全要求。
+官方 POSIX installer 默认还会安装旧的 `kimi-webbridge` skill。准备单独安装本 Pro
+skill 时使用 `--no-skill`，避免同一 skills 目录中两个 skill 并存后 Agent 选错。
+这不会删除已经存在的官方 skill；是否保留应由用户明确决定。
 
 ### 2. 安装 skill
 
@@ -130,6 +133,24 @@ python3 ./kimi-webbridge-pro/skill/scripts/doctor.py --wait-connected 20
 ```
 
 `doctor.py` 默认不启动 daemon，也不发送浏览器动作。只有显式传入 `--start` 时才会尝试启动 daemon。
+它也会报告同一 skills 根目录内的确定冲突；若两个 skill 位于不同的已知根目录，则给出
+条件式提醒，由用户判断当前 Agent 是否同时加载这两个根目录。
+
+Linux 用户可在安装当前 v2 daemon 后选择启用无 root 的登录自启动：
+
+```bash
+# 先只查看将要安装的 unit
+./kimi-webbridge-pro/skill/scripts/install_linux_autostart.sh --print-unit
+
+# 安装、启用并启动 systemd user service
+./kimi-webbridge-pro/skill/scripts/install_linux_autostart.sh
+```
+
+该 helper 需要 `systemctl`、`flock` 和 Python 3，会拒绝不支持 `start --foreground` 的旧 daemon；
+如果检测到直接启动的 daemon 仍在运行，它会保持现状并要求先显式停止，避免误杀复用 PID；
+如果其他 systemd 搜索路径已加载同名 unit，它也会拒绝用用户配置静默遮蔽；
+安装或卸载失败时会尝试恢复原 unit 以及先前的启用/运行状态，并在恢复不完整时警告；详见
+[`operations.md`](skill/references/operations.md)。
 
 ### 4. 调用
 
@@ -208,6 +229,7 @@ kimi-webbridge-pro/
     └── scripts/
         ├── invoke.ps1
         ├── invoke.sh
+        ├── install_linux_autostart.sh
         ├── doctor.py
         ├── screenshot.py
         ├── snapshot.py
@@ -274,8 +296,8 @@ Windows：
 py -3 .\skill\scripts\snapshot.py --session demo --auto
 py -3 .\skill\scripts\snapshot.py --session demo --mode compact
 
-# 完整快照保存到临时文件，仅返回文件路径
-py -3 .\skill\scripts\snapshot.py --session demo --mode file
+# 完整快照保存到指定文件；--path/--file 也是 --output 的别名
+py -3 .\skill\scripts\snapshot.py --session demo --mode file --output .\snapshot.json
 ```
 
 Linux / macOS：
@@ -285,8 +307,8 @@ Linux / macOS：
 python3 ./skill/scripts/snapshot.py --session demo --auto
 python3 ./skill/scripts/snapshot.py --session demo --mode compact
 
-# 完整快照保存到临时文件，仅返回文件路径
-python3 ./skill/scripts/snapshot.py --session demo --mode file
+# 完整快照保存到指定文件；--path/--file 也是 --output 的别名
+python3 ./skill/scripts/snapshot.py --session demo --mode file --output ./snapshot.json
 ```
 
 Windows 应使用 `py -3` 或 `py` 启动 Python，不要假定存在 `python3` 命令。
@@ -323,13 +345,16 @@ py -3 -m unittest discover -s tests -v
 ## 已知限制
 
 - PowerShell helper 目前以 Windows 为主；协议本身可在其他平台通过 HTTP 调用
-- `snapshot.py` 需要 Python 3，Bash helper 需要 Bash 和 curl
+- Python helpers 需要 Python 3；Bash helper 需要 Bash、curl 和 Python 3（用于 UTF-8/BOM 与 JSON object 预校验）
 - 合成点击和输入无法满足要求 `event.isTrusted` 的网站
 - 顶层页面操作不能直接访问跨域 iframe 内容
 - 浏览器可能拦截站点尝试打开的弹窗或新标签页
 - `find_tab` 选择的是 WebBridge session 内的目标，不保证切换浏览器可见焦点；独立标签页应使用独立 session
 - `find_tab active:true` 不能配合 `https://*/*` 可靠发现未知的当前标签页；应提供已知 URL/域名并核对快照
 - `fill` 对 `contenteditable` 仍是纯文本替换，不提供粗体、斜体或范围级富文本语义
+- 已检查的扩展 1.11.6 仍可能因选择错误的原生 setter 而无法填写 framework-controlled textarea；根修复在上游，受限 fallback 见 `protocol.md`
+- `navigate` 的 30 秒加载等待、超时后是否返回/登记 `tabId` 由上游 daemon/扩展决定；helpers 预留 45 秒仅用于完整接收其结果
+- `upload` 的 CDP `-32000 Not allowed` 需要先对齐 daemon/扩展版本；同版本仍失败属于上游能力限制
 - `mouse_click`、`key_type`、`send_keys` 和通用 `cdp` 取决于 daemon/扩展版本，其中 `cdp` 属于高权限高级能力
 - daemon 和扩展升级后，响应协议可能发生变化，需要重新实测
 

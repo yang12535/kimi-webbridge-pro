@@ -28,8 +28,7 @@ def parse_args():
 
 
 def default_output_path(image_format):
-    directory = Path(tempfile.gettempdir()) / "kimi-webbridge-screenshots"
-    directory.mkdir(parents=True, exist_ok=True)
+    directory = Path(tempfile.mkdtemp(prefix="kimi-webbridge-screenshots-"))
     suffix = ".jpg" if image_format == "jpeg" else ".png"
     handle = tempfile.NamedTemporaryFile(
         suffix=suffix,

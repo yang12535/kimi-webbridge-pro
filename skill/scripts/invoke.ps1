@@ -1,3 +1,15 @@
+<#
+.SYNOPSIS
+Send a typed JSON command to Kimi WebBridge.
+
+.DESCRIPTION
+Core argument schemas: navigate(url, newTab, group_title), find_tab(url, active),
+click(selector), fill(selector, value), evaluate(code), and upload(selector, files).
+Read references/protocol.md for the full version-dependent action contract.
+
+.EXAMPLE
+./invoke.ps1 -Session demo -Action evaluate -ActionArgs @{ code = "document.title" } -DryRun
+#>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
@@ -21,6 +33,10 @@ param(
 
 if ($Action -eq "close_session" -and -not $Force) {
     throw "Refusing close_session without -Force; verify every tab is task-owned."
+}
+
+if (-not $PSBoundParameters.ContainsKey("TimeoutSec") -and $Action -eq "navigate") {
+    $TimeoutSec = 45
 }
 if ($Action -eq "close_session" -and $Force) {
     Write-Warning "Forced close_session can close every tab attached to this session. Run list_tabs first and verify they are task-owned."
@@ -55,6 +71,14 @@ if ($ArgsFile) {
     if ($null -eq $ActionArgs -or $ActionArgs -is [array] -or $ActionArgs -is [string] -or $ActionArgs -is [ValueType]) {
         throw "Arguments file must contain a JSON object."
     }
+}
+
+if ($null -eq $ActionArgs -or
+    $ActionArgs -is [array] -or
+    $ActionArgs -is [string] -or
+    $ActionArgs -is [ValueType] -or
+    -not ($ActionArgs -is [System.Collections.IDictionary] -or $ActionArgs -is [pscustomobject])) {
+    throw "Action arguments must be a JSON-like object (for example, a hashtable or PSCustomObject)."
 }
 
 # Keep the daemon envelope consistent across every action.
