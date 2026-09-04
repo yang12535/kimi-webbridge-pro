@@ -146,7 +146,10 @@ Linux 用户可在安装当前 v2 daemon 后选择启用无 root 的登录自启
 ./kimi-webbridge-pro/skill/scripts/install_linux_autostart.sh
 ```
 
-该 helper 会拒绝不支持 `start --foreground` 的旧 daemon；详见
+该 helper 需要 `systemctl`、`flock` 和 Python 3，会拒绝不支持 `start --foreground` 的旧 daemon；
+如果检测到直接启动的 daemon 仍在运行，它会保持现状并要求先显式停止，避免误杀复用 PID；
+如果其他 systemd 搜索路径已加载同名 unit，它也会拒绝用用户配置静默遮蔽；
+安装或卸载失败时会尝试恢复原 unit 以及先前的启用/运行状态，并在恢复不完整时警告；详见
 [`operations.md`](skill/references/operations.md)。
 
 ### 4. 调用

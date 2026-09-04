@@ -93,7 +93,7 @@ scripts/install_linux_autostart.sh --print-unit
 scripts/install_linux_autostart.sh
 ```
 
-The helper refuses older binaries that do not advertise `start --foreground`. Upgrade through the official installer before enabling the unit. Remove the service with `scripts/install_linux_autostart.sh --uninstall`. A user service starts at login (`default.target`); the upstream daemon remains responsible for cleaning its PID file on exit.
+The helper requires `systemctl`, `flock`, and Python 3, and refuses older binaries that do not advertise `start --foreground`. It serializes changes and probes the existing service/direct-daemon state before stopping anything. To avoid signaling a reused PID, it refuses to replace a directly started daemon while that daemon is running; stop it explicitly, verify `status`, and rerun the helper. It also refuses to shadow a same-named unit already loaded from another systemd search path. A failed transition attempts to restore the prior unit, enablement, and runtime state, and warns if restoration is incomplete. Uninstall reloads and verifies the effective fragment and rejects active drop-ins before stopping the service. Remove the service with `scripts/install_linux_autostart.sh --uninstall`. A user service starts at login (`default.target`); the upstream daemon remains responsible for cleaning its PID file on exit.
 
 ## Lifecycle commands
 

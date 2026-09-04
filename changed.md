@@ -18,6 +18,7 @@
 - Moved the optional `ctypes` import into the Windows process check, warned non-blockingly when daemon/extension versions differ, and detected definite same-root plus conditional cross-root official/Pro skill coexistence.
 - Documented `evaluate (code)` in the quick path and helper help, including that `expression` is not the argument key.
 - Added bounded recovery guidance for controlled fields, upload `-32000`, and navigation timeouts while marking the remaining daemon/extension behavior as upstream-owned.
+- Made Linux autostart install/uninstall transitions serialized and rollback-safe: unknown pre-state aborts before mutation, same-named units from other search paths are not shadowed, cached units are never started after a failed reload, active direct daemons are left untouched for explicit shutdown, effective units are verified before stop/removal, and signal or partial-systemctl failures restore and verify the previous unit and service state where possible.
 - Updated installation guidance to use the official POSIX installer's `--no-skill` option when Pro will be installed separately; no existing skill is deleted automatically.
 - Documented that broad wildcard `find_tab active:true` calls cannot reliably discover an unknown current tab, and require a known URL/hostname or a dedicated host-agent API instead.
 - Documented the version-dependent `mouse_click`, `key_type`, `send_keys`, and high-privilege `cdp` actions observed in extension 1.10.1.
