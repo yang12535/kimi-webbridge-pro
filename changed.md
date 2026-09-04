@@ -14,7 +14,8 @@
 - Gave `navigate` 45 seconds of helper transport headroom while retaining the 30-second default for other actions, so the upstream page-load timeout response is not lost in a client race.
 - Made condition-less `wait_for.py` print a machine-readable `condition_required` error on stdout and exit 2; documented complete conditioned examples instead of implying a generic sleep.
 - Based snapshot auto-fallback on the final compact-output byte budget (12,000 bytes), removed embedded file-mode previews, pretty-printed inline JSON, preserved the legacy raw threshold option, added chosen-path aliases/metadata/newlines, and corrected exact-limit truncation.
-- Replaced shared snapshot/screenshot temp directories with per-invocation private directories.
+- Replaced shared snapshot/screenshot temp directories with per-invocation private directories; PowerShell now creates default POSIX screenshot directories/files atomically with owner-only `0700`/`0600` modes while retaining normal Windows ACL behavior.
+- Made Bash file/stdin argument validation byte-preserving so embedded NUL bytes and other malformed raw input are rejected instead of being silently changed by command substitution.
 - Moved the optional `ctypes` import into the Windows process check, warned non-blockingly when daemon/extension versions differ, and detected definite same-root plus conditional cross-root official/Pro skill coexistence.
 - Documented `evaluate (code)` in the quick path and helper help, including that `expression` is not the argument key.
 - Added bounded recovery guidance for controlled fields, upload `-32000`, and navigation timeouts while marking the remaining daemon/extension behavior as upstream-owned.

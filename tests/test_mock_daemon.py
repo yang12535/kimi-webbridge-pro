@@ -315,6 +315,26 @@ exec bash "$script" "${argv[@]}"
 
         self.assertEqual(json.loads(result.stdout)["args"]["code"], "document.title")
 
+    def test_invoke_sh_rejects_raw_nul_in_args_file_before_shell_normalization(self):
+        with tempfile.NamedTemporaryFile("wb", delete=False) as handle:
+            handle.write(b'{"value":"a\x00b"}')
+            args_path = Path(handle.name)
+        try:
+            result = self.run_bash_cli(
+                SCRIPTS / "invoke.sh",
+                "--action",
+                "fill",
+                "--args-file",
+                str(args_path),
+                "--dry-run",
+                expected=2,
+            )
+        finally:
+            args_path.unlink(missing_ok=True)
+
+        self.assertEqual(result.stdout, "")
+        self.assertIn("Arguments must be valid UTF-8 JSON", result.stderr)
+
     def test_invoke_sh_refuses_close_session_without_force(self):
         result = self.run_bash_cli(
             SCRIPTS / "invoke.sh",
@@ -3504,6 +3524,9 @@ exit 99
                 outputs.append(output)
                 self.assertEqual(output.read_bytes(), b"fake-image-bytes")
                 self.assertTrue(output.parent.name.startswith("kimi-webbridge-screenshots-"))
+                if os.name != "nt":
+                    self.assertEqual(output.parent.stat().st_mode & 0o777, 0o700)
+                    self.assertEqual(output.stat().st_mode & 0o777, 0o600)
 
             self.assertNotEqual(outputs[0].parent, outputs[1].parent)
         finally:

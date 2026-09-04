@@ -125,20 +125,6 @@ if [[ -n "$args_file" && "$args_json_set" == true ]]; then
   exit 2
 fi
 
-if [[ -n "$args_file" ]]; then
-  if [[ "$args_file" == "-" ]]; then
-    if [[ -t 0 ]]; then
-      echo "Refusing to wait for JSON on an interactive terminal; pipe input or use a heredoc." >&2
-      exit 2
-    fi
-    args_json="$(cat)"
-  else
-    [[ -f "$args_file" ]] || { echo "Arguments file not found: $args_file" >&2; exit 2; }
-    args_json="$(<"$args_file")"
-  fi
-fi
-
-[[ "$args_json" =~ [^[:space:]] ]] || { echo "Arguments JSON is empty." >&2; exit 2; }
 if [[ -n "$output_path" && -d "$output_path" ]]; then
   echo "Output path must be a file, not a directory: $output_path" >&2
   exit 2
@@ -156,8 +142,28 @@ else
   exit 2
 fi
 
-if ! args_json="$(
-  printf '%s' "$args_json" | "${json_python[@]}" -c '
+raw_args_file="$(mktemp)"
+normalized_args_file="$(mktemp)"
+request_file="$(mktemp)"
+response_file="$(mktemp)"
+trap 'rm -f "$raw_args_file" "$normalized_args_file" "$request_file" "$response_file"' EXIT
+
+if [[ -n "$args_file" ]]; then
+  if [[ "$args_file" == "-" ]]; then
+    if [[ -t 0 ]]; then
+      echo "Refusing to wait for JSON on an interactive terminal; pipe input or use a heredoc." >&2
+      exit 2
+    fi
+    cat > "$raw_args_file"
+  else
+    [[ -f "$args_file" ]] || { echo "Arguments file not found: $args_file" >&2; exit 2; }
+    cp -- "$args_file" "$raw_args_file"
+  fi
+else
+  printf '%s' "$args_json" > "$raw_args_file"
+fi
+
+if ! "${json_python[@]}" -c '
 import json
 import sys
 
@@ -165,10 +171,11 @@ def reject_constant(value):
     raise ValueError(f"non-finite JSON number: {value}")
 
 try:
-    value = json.loads(
-        sys.stdin.buffer.read().decode("utf-8-sig"),
-        parse_constant=reject_constant,
-    )
+    text = sys.stdin.buffer.read().decode("utf-8-sig")
+    if not text.strip():
+        print("Arguments JSON is empty.", file=sys.stderr)
+        raise SystemExit(2)
+    value = json.loads(text, parse_constant=reject_constant)
 except (UnicodeError, ValueError) as error:
     print(f"Arguments must be valid UTF-8 JSON: {error}", file=sys.stderr)
     raise SystemExit(2)
@@ -177,18 +184,14 @@ if not isinstance(value, dict):
     raise SystemExit(2)
 encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 sys.stdout.buffer.write(encoded)
-'
-)"; then
+' < "$raw_args_file" > "$normalized_args_file"; then
   exit 2
 fi
 
-request_file="$(mktemp)"
-response_file="$(mktemp)"
-trap 'rm -f "$request_file" "$response_file"' EXIT
-
 # Build the envelope from a UTF-8 args file without depending on jq.
 {
-  printf '{"action":"%s","args":%s' "$action" "$args_json"
+  printf '{"action":"%s","args":' "$action"
+  cat "$normalized_args_file"
   if [[ -n "$session" ]]; then
     printf ',"session":"%s"' "$session"
   fi
