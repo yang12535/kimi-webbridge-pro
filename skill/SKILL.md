@@ -22,11 +22,12 @@ Project source and issue tracker: https://github.com/yang12535/kimi-webbridge-pr
 
    Proceed only when the report has `"ready": true`. Otherwise read [operations.md](references/operations.md).
 2. Assign one stable `session` name for each controlled tab or independent workstream.
-3. Use `find_tab` for user-owned existing tabs, or `navigate` with `newTab:true` for task-owned tabs.
+3. Use `find_tab` for existing session tabs. For user-owned tabs outside the session, follow the [scoped lookup and focus fallback](references/protocol.md#find_tab-search-scope-and-url-matching). Use `navigate` with `newTab:true` for task-owned tabs.
 
 ## Quick decision tree
 
-- Need the user's existing login state? Use `find_tab` with a known URL or hostname, then take a snapshot and verify URL/title before acting.
+- Need an existing tab? Try `find_tab` with the known URL or hostname in the same session, then verify the full URL/title in a snapshot. In extension 2.0.22, default lookup searches session tabs only; `active:true` checks only the foreground tab in the last-focused browser window.
+- Normal lookup missed? Try the known URL with `active:true` once before prompting; if that also misses, follow the [fallback workflow](references/protocol.md#when-normal-lookup-misses). In unattended mode, continue independent work and use a suitable task-owned page when the task permits; automatic approval after 300 seconds and a six-hour grant require upstream support and are not implemented here.
 - User says only "current tab" and gives no URL or hostname? Do not guess with a broad wildcard; ask for the URL/domain or use a dedicated current-tab API when the host agent provides one.
 - Need a side tab for a lookup or analysis? Give it a different session so it cannot displace the original tab's session selection.
 - Need an isolated tab you can close later? Use `navigate` with `newTab:true`.
@@ -44,7 +45,7 @@ Use this as the minimum dashboard. Read [protocol.md](references/protocol.md) fo
 | Action | Use when |
 |---|---|
 | `navigate` | Open a URL in the selected tab, or create a task-owned tab with `newTab:true`. |
-| `find_tab` | Attach the session to an existing user-owned tab by URL. |
+| `find_tab` | Select a matching session tab, or borrow the matching foreground tab with `active:true`; not a browser-wide search in 2.0.22. |
 | `list_tabs` | Inspect tabs associated with the session before cleanup or popup diagnosis. |
 | `snapshot` | Read URL, title, accessible text, and `@e` refs for the selected tab. |
 | `click` | Click a snapshot ref or selector after taking a fresh snapshot. |
@@ -143,31 +144,31 @@ scripts/invoke.sh --session demo --action list_tabs
 scripts/invoke.sh --session demo --action close_tab
 ```
 
-User-owned tab workflow: call `find_tab`, take a compact `snapshot`, perform the requested action, and do not close the tab unless the user explicitly asks.
+User-owned tab workflow: try `find_tab` in the same session. After a miss, use the documented focus fallback when appropriate. Once attached, take a compact `snapshot`, verify the actual page, perform the requested action, and do not close the tab unless the user explicitly asks.
 
-`find_tab` requires a URL pattern and does not visibly activate the selected browser tab. Use a known, narrow URL pattern and verify the snapshot. Do not use `https://*/*` with `active:true` to discover an unknown current tab; some extension versions fall back to the first matching HTTPS tab.
+`find_tab` requires a known URL or hostname and does not visibly activate the selected browser tab. In 2.0.22, matching uses the hostname and ignores the path, so even a full URL does not uniquely select an editor or document. Do not use broad wildcards to discover an unknown current tab.
 
-When visible activation is necessary and the installed version supports the advanced `cdp` action, select a known tab first and request `Page.bringToFront`:
+When a tab is already attached to the session and visible activation is necessary, use the advanced `cdp` action if supported. `Page.bringToFront` cannot discover or attach an unknown tab:
 
 ```powershell
-& scripts\invoke.ps1 -Session "game" -Action "find_tab" -ActionArgs @{
-  url = "https://neal.fun/password-game/"
+& scripts\invoke.ps1 -Session "example-task" -Action "find_tab" -ActionArgs @{
+  url = "https://example.com/"
 }
-& scripts\invoke.ps1 -Session "game" -Action "cdp" -ActionArgs @{
+& scripts\invoke.ps1 -Session "example-task" -Action "cdp" -ActionArgs @{
   method = "Page.bringToFront"
   params = @{}
 }
-py -3 scripts\snapshot.py --session "game" --auto
+py -3 scripts\snapshot.py --session "example-task" --auto
 ```
 
 ```bash
-scripts/invoke.sh --session game --action find_tab --args-stdin <<'JSON'
-{"url":"https://neal.fun/password-game/"}
+scripts/invoke.sh --session example-task --action find_tab --args-stdin <<'JSON'
+{"url":"https://example.com/"}
 JSON
-scripts/invoke.sh --session game --action cdp --args-stdin <<'JSON'
+scripts/invoke.sh --session example-task --action cdp --args-stdin <<'JSON'
 {"method":"Page.bringToFront","params":{}}
 JSON
-python3 scripts/snapshot.py --session game --auto
+python3 scripts/snapshot.py --session example-task --auto
 ```
 
 Treat `Page.bringToFront` as version-dependent and verify the resulting URL/title. If `cdp` is unavailable, keep controlling the selected session tab without claiming that the visible browser focus changed.
@@ -175,15 +176,15 @@ Treat `Page.bringToFront` as version-dependent and verify the resulting URL/titl
 ## Follow one task workflow
 
 1. Assign one stable session name per controlled tab or independent workstream.
-2. Use `find_tab` for a user-owned existing tab, or `navigate` with `newTab:true` for a task-owned tab.
+2. Use scoped `find_tab` lookup for an existing tab; follow the documented fallback after a miss. Use `navigate` with `newTab:true` for a task-owned tab when it satisfies the task.
 3. Take `snapshot.py --auto` for unknown pages, or `snapshot.py --mode compact` when you only need controls.
 4. Use snapshot `@e` refs with `click` and `fill`.
 5. After navigation or a click that should change the page, use [wait_for.py](scripts/wait_for.py) with an explicit expected condition, for example `--url-contains example.com` or `--text-contains Saved`.
 6. Take a new snapshot after a substantial DOM change; old refs may be stale.
 7. Use `list_tabs` before cleanup and prefer `close_tab` for task-owned tabs. Do not close user-owned tabs.
 
-Do not assume `find_tab` visibly focuses a browser tab. It selects a matching tab for the WebBridge session; `active:true` means prefer the browser's currently active matching tab.
-Do not use broad URL wildcards with `active:true`; active preference is reliable only for a known host in affected extension versions.
+Do not assume `find_tab` visibly focuses a browser tab. In 2.0.22, `active:true` exclusively checks the foreground tab in the last-focused normal/popup browser window; it does not fall back to other matching tabs.
+Use a known URL or hostname, and verify the full URL/title after attachment. See the protocol reference for version-specific matching and bounded recovery.
 Do not use one session to alternate between an original page and a side lookup tab. Use a second session for the side tab and keep the original session bound to the original page; this avoids relying on daemon-side focus switching.
 Treat `@e` values as WebBridge snapshot references, not DOM attributes. Do not query them with selectors such as `[data-ref="@e1"]`.
 When using `wait_for.py`, the text condition flag is `--text-contains`; `--visible-text` is accepted as an alias.

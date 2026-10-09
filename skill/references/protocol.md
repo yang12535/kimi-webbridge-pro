@@ -111,7 +111,7 @@ Wait for an expected URL, title, or visible accessibility text:
 
 ```powershell
 py -3 scripts\wait_for.py --session demo `
-  --url-contains "zhuanlan.zhihu.com" --timeout 10
+  --url-contains "example.com" --timeout 10
 py -3 scripts\wait_for.py --session demo `
   --text-contains "已保存" --timeout 10
 ```
@@ -141,8 +141,8 @@ Action availability depends on the installed daemon and extension versions. The 
 | Action | Arguments | Purpose |
 |---|---|---|
 | `navigate` | `url`, `newTab`, optional `group_title` | Navigate the selected tab or create a task-owned tab. Helpers allow 45s by default so the daemon's roughly 30s load error can arrive intact. |
-| `find_tab` | `url`, optional `active` | Select an existing matching tab for the session. URL matching varies by extension version; see below. |
-| `list_tabs` | none | Inspect tabs associated with the session. It cannot enumerate every browser tab; use `find_tab` for discovery. |
+| `find_tab` | `url`, optional `active` | Search session tabs, or check the foreground tab with `active:true`. See the version-specific scope below. |
+| `list_tabs` | none | Inspect tabs associated with the session. It cannot enumerate every browser tab. |
 | `snapshot` | none | Read URL, title, accessibility tree, and `@e` refs. |
 | `click` | `selector` | Click an `@e` ref or CSS selector. |
 | `fill` | `selector`, `value` | Replace plain text in inputs, textareas, or contenteditable editors; rich-text markup is not preserved. |
@@ -158,12 +158,49 @@ Action availability depends on the installed daemon and extension versions. The 
 | `close_tab` | none | Close the selected task-owned tab. |
 | `close_session` | none | Close all tabs associated with the session. Use only when every tab is task-owned. |
 
-### `find_tab` URL matching
+### `find_tab` search scope and URL matching
 
-- Prefer a known full URL copied from `list_tabs`/`navigate`, for example `https://console.example.com/cam/user`, or a known hostname such as `console.example.com`.
-- Matching is version-dependent. Extension 1.11.6 normalizes non-wildcard URL/hostname input to a host match and ignores the path. Older releases accepted some Chrome-style match patterns. Do not treat either behavior as a stable cross-version substring or wildcard contract.
-- Bare fragments such as `http`, `console`, or `.com`, host-and-port shorthand, and broad patterns such as `*://*/*` are not reliable across supported versions.
-- Use `active:true` only with a known URL/hostname. It means "borrow the foreground tab if that known host matches," not "enumerate or guess the current tab."
+The following scope was checked in extension **2.0.22** source on 2026-10-09. The connected daemon was **v2.0.5**; this is not a regression result for an aligned pair or a guarantee for future releases. Check installed versions when diagnosing a change in behavior.
+
+| Arguments | Search scope in extension 2.0.22 |
+|---|---|
+| `url`, with `active` omitted or false | Only tab IDs supplied for this session (`_tabIds`, an internal field). A new session may have none. |
+| `url`, `active:true` | Only the active tab of the last-focused normal/popup browser window. A mismatch fails immediately; it does not search other windows or session tabs. |
+
+Neither branch performs browser-wide discovery. A visible tab can exist outside both scopes. A lookup miss does not prove that the page is closed, logged out, or in a different Profile. Changing URL spelling, restarting a healthy daemon, or creating new sessions does not expand this scope. Do not supply internal `_tabIds` yourself.
+
+- Use the task's known full URL, such as `https://example.com/`, or a known hostname such as `example.com`.
+- In 2.0.22, matching accepts the same hostname or its subdomains and ignores the URL path. Verify the full URL/title in a snapshot before acting; a full editor URL alone does not distinguish multiple pages on one host. Extension 1.11.6 also used host matching for non-wildcard inputs; wildcard behavior is not a stable cross-version contract.
+- Bare fragments such as `http` or `.com`, host-and-port shorthand, and broad patterns such as `*://*/*` are not reliable discovery inputs.
+- `active:true` checks the browser's foreground tab; it does not activate a search result. After a successful attachment, keep using the same session so later actions do not depend on the user maintaining focus.
+
+### When normal lookup misses
+
+Try normal lookup in the existing session first. After a miss, try `active:true` once with the known URL before prompting; the target may already be in the foreground. If either lookup succeeds, verify URL/title and continue immediately. Offer a bounded focus wait only if both miss; do not interrupt successful workflows with an extra prompt.
+
+**Interactive fallback:** tell the user to switch to the known target page and keep it active in the last-focused browser window while the agent retries. They do not need to switch back to a browser-based terminal to acknowledge the request; doing so can change the foreground tab before attachment. Use the same session and `active:true` with the known URL:
+
+```powershell
+& scripts\invoke.ps1 -Session "example-task" -Action "find_tab" -ActionArgs @{
+  url = "https://example.com/"
+  active = $true
+}
+```
+
+```bash
+scripts/invoke.sh --session example-task --action find_tab \
+  --args-json '{"url":"https://example.com/","active":true}'
+```
+
+If waiting for focus, use a total wall-clock deadline of at most 300 seconds unless the user specifies another duration. Retry at a modest interval (for example, 3 seconds), keep each request timeout within the remaining budget, and stop immediately on attachment, cancellation, or an error other than the expected foreground mismatch (for example, a disconnected daemon). Parse the JSON result; a successful HTTP request alone does not prove attachment. Verify URL/title after success. This is a workflow using existing commands, not a new `--wait-focus` helper or an approval timer. `wait_for.py` observes an already selected page and cannot attach an unowned tab.
+
+**Unattended / auto mode:** do not create an indefinite human-only dependency or keep asking for the same focus change. Continue independent work. When a fresh page satisfies the task, use `navigate` with `newTab:true` in a separate session and verify its state. It does not recover the original page's unsaved form, tab-local state, or in-progress editor. If the task requires that exact tab and no supported route can attach it, report the specific blocked dependency while completing other possible work. A focus-wait deadline does not expand the extension's capabilities.
+
+### Upstream-dependent unattended fallback (not implemented)
+
+The proposed optional fallback is: after normal lookup fails, display the request reason, allow the user to switch to the target immediately, or wait 300 seconds before activating a six-hour grant already authorized by the user's auto-mode settings. The intended scope is the current task, browser Profile, target site, and permitted operations; the six hours start when the grant activates, do not renew on use, and end earlier if the task ends or the user revokes it. An explicit refusal or cancellation must cancel the pending fallback. A missing notification or unopened approval page must not prevent a previously authorized auto workflow from progressing.
+
+**The inspected extension and the Pro helpers do not implement this fallback.** There is no supported `allowAllTabs` argument, automatic approval timer, or six-hour grant in this `find_tab` workflow. A localhost notice, chat consent, or a helper sleeping for 300 seconds cannot add browser-wide lookup. Upstream must implement the scoped lookup/attachment and grant lifecycle, with a daemon protocol that can survive the approval wait. Do not advertise or simulate those capabilities from skill text. Record version alignment separately; upgrading alone is not evidence that this feature exists.
 
 ## Privacy constraints
 
@@ -228,9 +265,9 @@ Action availability depends on the installed daemon and extension versions. The 
 
 ## Tab and popup behavior
 
-- `find_tab active:true` prefers the currently active matching browser tab; it does not mean "activate this result."
-- `find_tab` requires `url`. Do not use `https://*/*` or another broad wildcard to discover an unknown current tab: affected extension versions may fall back to the first matching tab instead of the active tab.
-- Use a known, narrow URL pattern and verify URL/title. If the current URL or hostname is unknown, ask for it or use a dedicated current-tab API supplied by the host agent.
+- In 2.0.22, `find_tab active:true` checks only the active tab of the last-focused normal/popup browser window; it does not mean "activate this result." See [search scope](#find_tab-search-scope-and-url-matching).
+- `find_tab` requires `url`. Do not use `https://*/*` or another broad wildcard to discover an unknown current tab.
+- Use a known URL or hostname and verify the full URL/title. If the current URL or hostname is unknown, use task context or a dedicated current-tab API supplied by the host agent; ask when interactive clarification is available.
 - When `cdp` is available, `{"method":"Page.bringToFront","params":{}}` can request visible activation after `find_tab`; verify the resulting snapshot and do not claim activation if the action is unavailable or fails.
 - Keep independent tabs in independent sessions. Do not rely on repeated `find_tab` calls in one multi-tab session to switch subsequent actions reliably.
 - A click may open a background tab without changing the visible page.
