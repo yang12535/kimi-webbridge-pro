@@ -121,6 +121,9 @@ The helper requires `systemctl`, `flock`, and Python 3, and refuses older binari
 | Extension connected but every action fails or times out | Run `doctor.py --probe` to confirm, then restart the daemon once (`kimi-webbridge restart`) and retry. The extension WebSocket can be a zombie that `status` cannot detect. |
 | The error asks for an extension update | Update the extension from the Chrome Web Store link above; do not repeatedly retry the action. |
 | An action returns `Unknown tool` | Treat it as unavailable in the installed daemon/extension pair. Check both versions and update through official channels before retrying once; do not silently replace it with unrestricted `evaluate` or `cdp`. |
+| `find_tab` reports `no tab matching ... in this session` but the page is open | In extension 2.0.22, default lookup checks session tab IDs only. Follow the [focus fallback](protocol.md#when-normal-lookup-misses) after a normal lookup miss; changing URL spellings or restarting a healthy daemon does not broaden the search. |
+| `find_tab(active:true)` reports `no foreground tab matching` | The known target must be active in the last-focused normal/popup browser window. Use a bounded focus wait when appropriate; in unattended mode, continue independent work or use a suitable fresh page. |
+| An unattended workflow expects approval after 300 seconds or a six-hour grant | This is an [upstream-dependent proposal](protocol.md#upstream-dependent-unattended-fallback-not-implemented), not an installed Pro capability. Do not wait indefinitely or report that timeout granted access. |
 
 `status.extension_id` may differ from the Chrome Web Store URL ID. Treat `doctor.py`'s `ready` result as the authoritative readiness signal because it includes daemon status, extension connectivity, and the `127.0.0.1:10086` port probe; use the ID only as supporting diagnostic context.
 

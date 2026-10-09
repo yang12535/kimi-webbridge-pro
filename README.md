@@ -349,8 +349,10 @@ py -3 -m unittest discover -s tests -v
 - 合成点击和输入无法满足要求 `event.isTrusted` 的网站
 - 顶层页面操作不能直接访问跨域 iframe 内容
 - 浏览器可能拦截站点尝试打开的弹窗或新标签页
-- `find_tab` 选择的是 WebBridge session 内的目标，不保证切换浏览器可见焦点；独立标签页应使用独立 session
-- `find_tab active:true` 不能配合 `https://*/*` 可靠发现未知的当前标签页；应提供已知 URL/域名并核对快照
+- 已核对的扩展 2.0.22 中，`find_tab` 默认只查本 session 的标签；`active:true` 只检查最后聚焦的 normal/popup 浏览器窗口中的前台标签，均不做全局搜索，也不保证切换可见焦点
+- `find_tab` 按主机名匹配、忽略路径；例如传入 `https://example.com/` 不代表唯一选中了该站点的某个编辑页，操作前必须核对实际 URL/title；不要使用广泛通配符猜当前页
+- 正常查找失败后才推荐[限时等待用户切换目标页](skill/references/protocol.md#when-normal-lookup-misses)；无人值守任务应继续可独立执行的工作，或在任务允许时新建页面，不能无限等待人工，也不能将新页面当作原标签页的未保存状态
+- “auto 模式预授权、300 秒后自动启用兜底、持续六小时免重复授权”目前是[上游依赖的方案](skill/references/protocol.md#upstream-dependent-unattended-fallback-not-implemented)，本仓库的文档和 helpers 均未实现；本地提示页、等待超时或升级本身不能证明该能力已存在
 - `fill` 对 `contenteditable` 仍是纯文本替换，不提供粗体、斜体或范围级富文本语义
 - 已检查的扩展 1.11.6 仍可能因选择错误的原生 setter 而无法填写 framework-controlled textarea；根修复在上游，受限 fallback 见 `protocol.md`
 - `navigate` 的 30 秒加载等待、超时后是否返回/登记 `tabId` 由上游 daemon/扩展决定；helpers 预留 45 秒仅用于完整接收其结果
